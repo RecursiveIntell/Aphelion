@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aphelion-editor"
+version = "0.1.0"
+description = "A professional, layer-based image editor for Linux."
+readme = "README.md"
+authors = [
+  { name="Aphelion Team", email="team@aphelion.org" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Graphics :: Editors :: Raster-Based",
+]
+    "PySide6>=6.0",
+requires-python = ">=3.8"
+
+[project.urls]
+"Homepage" = "https://github.com/aphelion/aphelion"
+"Bug Tracker" = "https://github.com/aphelion/aphelion/issues"
+
+[project.scripts]
+aphelion = "src.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
