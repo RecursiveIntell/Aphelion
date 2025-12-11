@@ -1,5 +1,4 @@
 # Aphelion Image Editor
-![Screenshot](https://github.com/RecursiveIntell/Aphelion/blob/main/Screenshot_20251211_121416.png)
 
 **Aphelion** is a professional, layer-based image editor for Linux, built with Python and PySide6. It provides Paint.NET-like functionality with **43 image effects**, **21 tools**, and extensive file format support.
 
