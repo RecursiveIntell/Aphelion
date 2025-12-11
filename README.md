@@ -1,27 +1,27 @@
 # Aphelion Image Editor
 ![Screenshot](https://github.com/RecursiveIntell/Aphelion/blob/main/Screenshot_20251211_121416.png)
 
-**Aphelion** is a professional, layer-based image editor for Linux, built with Python and PySide6. It provides Paint.NET-like functionality with 35 image effects, 20 tools, and extensive file format support.
+**Aphelion** is a professional, layer-based image editor for Linux, built with Python and PySide6. It provides Paint.NET-like functionality with **43 image effects**, **21 tools**, and extensive file format support.
 
 ## ✨ Features
 
-### 🎨 Tools (20)
+### 🎨 Tools (21)
 | Category | Tools |
 |----------|-------|
 | **Selection** | Rectangle, Ellipse, Lasso, Magic Wand |
-| **Drawing** | Brush, Pencil, Eraser (with tablet pressure) |
-| **Shapes** | Line, Curve, Rectangle, Ellipse |
-| **Fill** | Paint Bucket, Gradient (linear/radial) |
+| **Drawing** | Brush, Pencil, Eraser (pressure sensitive), **Smudge** |
+| **Shapes** | Line, Curve, Rectangle, Ellipse, **Rounded Rect**, **Polygon**, **Star**, **Arrow** |
+| **Fill** | Paint Bucket, Gradient (Linear, Radial, Conical, Diamond, Reflected) |
 | **Retouching** | Clone Stamp, Recolor |
 | **Utility** | Text, Color Picker, Zoom, Move |
 
-### 🖼️ Effects (35)
+### 🖼️ Effects (43)
 | Category | Effects |
 |----------|---------|
-| **Adjustments** | Invert, Brightness/Contrast, Hue/Saturation, Auto Level, Sepia, Curves, Levels, Posterize, Black & White |
-| **Blurs** | Gaussian, Sharpen, Motion, Radial, Zoom, Surface, Median |
-| **Distort** | Pixelate, Bulge, Twist, Tile Reflection, Dents, Crystallize |
-| **Stylize** | Emboss, Edge Detect, Outline, Fragment |
+| **Adjustments** | Invert, Invert Alpha, Brightness/Contrast, Hue/Saturation, Auto Level, Sepia, Curves, Levels, Posterize, Black & White, **Color Balance** |
+| **Blurs** | Gaussian, Sharpen, Motion, Radial, Zoom, Surface, Median, **Bokeh**, **Sketch** |
+| **Distort** | Pixelate, Bulge, Twist, Tile Reflection, Dents, Crystallize, **3D Rotate/Zoom**, **Polar Inversion** |
+| **Stylize** | Emboss, Edge Detect, Outline, Fragment, **Drop Shadow**, **Channel Shift** |
 | **Artistic** | Oil Painting, Pencil Sketch, Ink Sketch |
 | **Photo** | Vignette, Glow, Red Eye Removal |
 | **Noise** | Add Noise, Reduce Noise |
@@ -34,6 +34,7 @@
 
 ### 🎭 Additional Features
 - **Layer System**: Unlimited layers with blend modes, opacity, and masks
+- **Selection Tools**: Advance operations like **Feather**, **Expand**, **Contract**, Invert
 - **Undo/Redo**: Full history with visual timeline
 - **Plugin System**: Extend with Python scripts
 - **Themes**: Light and Dark mode
