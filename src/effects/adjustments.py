@@ -288,3 +288,117 @@ class AutoLevelEffect(Effect):
                 new_img.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
                 
         return new_img
+
+
+class InvertAlphaEffect(Effect):
+    """Invert only the alpha channel, leaving RGB unchanged."""
+    name = "Invert Alpha"
+    category = "Adjustments"
+
+    def apply(self, image: QImage, config: dict) -> QImage:
+        new_img = image.copy()
+        width = new_img.width()
+        height = new_img.height()
+        
+        for y in range(height):
+            for x in range(width):
+                c = new_img.pixelColor(x, y)
+                new_alpha = 255 - c.alpha()
+                new_img.setPixelColor(x, y, QColor(c.red(), c.green(), c.blue(), new_alpha))
+        
+        return new_img
+
+
+class ColorBalanceDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Color Balance")
+        layout = QVBoxLayout()
+        
+        # Cyan-Red
+        cr_layout = QHBoxLayout()
+        cr_layout.addWidget(QLabel("Cyan"))
+        self.cr_slider = QSlider(Qt.Orientation.Horizontal)
+        self.cr_slider.setRange(-100, 100)
+        self.cr_slider.setValue(0)
+        cr_layout.addWidget(self.cr_slider)
+        cr_layout.addWidget(QLabel("Red"))
+        self.cr_val = QLabel("0")
+        self.cr_slider.valueChanged.connect(lambda v: self.cr_val.setText(str(v)))
+        cr_layout.addWidget(self.cr_val)
+        layout.addLayout(cr_layout)
+        
+        # Magenta-Green
+        mg_layout = QHBoxLayout()
+        mg_layout.addWidget(QLabel("Magenta"))
+        self.mg_slider = QSlider(Qt.Orientation.Horizontal)
+        self.mg_slider.setRange(-100, 100)
+        self.mg_slider.setValue(0)
+        mg_layout.addWidget(self.mg_slider)
+        mg_layout.addWidget(QLabel("Green"))
+        self.mg_val = QLabel("0")
+        self.mg_slider.valueChanged.connect(lambda v: self.mg_val.setText(str(v)))
+        mg_layout.addWidget(self.mg_val)
+        layout.addLayout(mg_layout)
+        
+        # Yellow-Blue
+        yb_layout = QHBoxLayout()
+        yb_layout.addWidget(QLabel("Yellow"))
+        self.yb_slider = QSlider(Qt.Orientation.Horizontal)
+        self.yb_slider.setRange(-100, 100)
+        self.yb_slider.setValue(0)
+        yb_layout.addWidget(self.yb_slider)
+        yb_layout.addWidget(QLabel("Blue"))
+        self.yb_val = QLabel("0")
+        self.yb_slider.valueChanged.connect(lambda v: self.yb_val.setText(str(v)))
+        yb_layout.addWidget(self.yb_val)
+        layout.addLayout(yb_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+        
+    def get_config(self):
+        return {
+            "cyan_red": self.cr_slider.value(),
+            "magenta_green": self.mg_slider.value(),
+            "yellow_blue": self.yb_slider.value()
+        }
+
+
+class ColorBalanceEffect(Effect):
+    """Adjust color balance between complementary color pairs."""
+    name = "Color Balance"
+    category = "Adjustments"
+    
+    def create_dialog(self, parent) -> QDialog:
+        return ColorBalanceDialog(parent)
+    
+    def apply(self, image: QImage, config: dict) -> QImage:
+        cyan_red = config.get("cyan_red", 0)
+        magenta_green = config.get("magenta_green", 0)
+        yellow_blue = config.get("yellow_blue", 0)
+        
+        if cyan_red == 0 and magenta_green == 0 and yellow_blue == 0:
+            return image.copy()
+        
+        new_img = image.copy()
+        width = new_img.width()
+        height = new_img.height()
+        
+        # Convert -100..100 to -255..255 adjustments
+        r_adj = int(cyan_red * 2.55)
+        g_adj = int(magenta_green * 2.55)
+        b_adj = int(yellow_blue * 2.55)
+        
+        for y in range(height):
+            for x in range(width):
+                c = new_img.pixelColor(x, y)
+                r = max(0, min(255, c.red() + r_adj))
+                g = max(0, min(255, c.green() + g_adj))
+                b = max(0, min(255, c.blue() + b_adj))
+                new_img.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
+        
+        return new_img

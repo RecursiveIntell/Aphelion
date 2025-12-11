@@ -19,6 +19,7 @@ from ...tools.zoom import ZoomTool
 from ...tools.clone_stamp import CloneStampTool
 from ...tools.pencil import PencilTool
 from ...tools.line_curve import LineCurveTool
+from ...tools.smudge import SmudgeTool
 
 class ToolsDock(QWidget):
     def __init__(self, session: Session):
@@ -68,11 +69,12 @@ class ToolsDock(QWidget):
         
         # Row 4: Fill/Text
         self.register_tool("Bucket", PaintBucketTool(None, self.session), 7, 0, "bucket.png", "F")
-        self.register_tool("Gradient", GradientTool(None, self.session), 7, 1, "gradient.png", "G")
+        self.register_tool("Gradient", GradientTool(self.session), 7, 1, "gradient.png", "G")
         self.register_tool("Text", TextTool(None, self.session), 8, 0, "text.png", "T")
         self.register_tool("Picker", ColorPickerTool(None, self.session), 8, 1, "picker.png", "K")
         self.register_tool("Zoom", ZoomTool(None, self.session), 9, 0, "zoom.png", "Z")
         self.register_tool("Recolor", RecolorTool(None, self.session), 9, 1, "recolor.png", "R")
+        self.register_tool("Smudge", SmudgeTool(self.session), 10, 0, "brush.png", "U")
         
         # Set default
         self.select_tool("Brush")

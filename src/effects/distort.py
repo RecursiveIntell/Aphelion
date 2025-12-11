@@ -614,3 +614,198 @@ class DentsEffect(Effect):
                 result.setPixelColor(x, y, image.pixelColor(sx, sy))
         
         return result
+
+
+class Rotate3DDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("3D Rotate / Zoom")
+        layout = QVBoxLayout()
+        
+        # Rotation X
+        rx_layout = QHBoxLayout()
+        rx_layout.addWidget(QLabel("Rotate X:"))
+        self.rx_slider = QSlider(Qt.Orientation.Horizontal)
+        self.rx_slider.setRange(-60, 60)
+        self.rx_slider.setValue(0)
+        rx_layout.addWidget(self.rx_slider)
+        self.rx_val = QLabel("0°")
+        self.rx_slider.valueChanged.connect(lambda v: self.rx_val.setText(f"{v}°"))
+        rx_layout.addWidget(self.rx_val)
+        layout.addLayout(rx_layout)
+        
+        # Rotation Y
+        ry_layout = QHBoxLayout()
+        ry_layout.addWidget(QLabel("Rotate Y:"))
+        self.ry_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ry_slider.setRange(-60, 60)
+        self.ry_slider.setValue(0)
+        ry_layout.addWidget(self.ry_slider)
+        self.ry_val = QLabel("0°")
+        self.ry_slider.valueChanged.connect(lambda v: self.ry_val.setText(f"{v}°"))
+        ry_layout.addWidget(self.ry_val)
+        layout.addLayout(ry_layout)
+        
+        # Zoom
+        z_layout = QHBoxLayout()
+        z_layout.addWidget(QLabel("Zoom:"))
+        self.z_slider = QSlider(Qt.Orientation.Horizontal)
+        self.z_slider.setRange(50, 200)
+        self.z_slider.setValue(100)
+        z_layout.addWidget(self.z_slider)
+        self.z_val = QLabel("100%")
+        self.z_slider.valueChanged.connect(lambda v: self.z_val.setText(f"{v}%"))
+        z_layout.addWidget(self.z_val)
+        layout.addLayout(z_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+        
+    def get_config(self):
+        return {
+            "rotate_x": self.rx_slider.value(),
+            "rotate_y": self.ry_slider.value(),
+            "zoom": self.z_slider.value()
+        }
+
+
+class Rotate3DEffect(Effect):
+    """3D Rotate / Zoom perspective transformation."""
+    name = "3D Rotate / Zoom"
+    category = "Distort"
+    
+    def create_dialog(self, parent) -> QDialog:
+        return Rotate3DDialog(parent)
+    
+    def apply(self, image: QImage, config: dict) -> QImage:
+        rotate_x = config.get("rotate_x", 0)
+        rotate_y = config.get("rotate_y", 0)
+        zoom = config.get("zoom", 100) / 100.0
+        
+        width = image.width()
+        height = image.height()
+        cx, cy = width / 2, height / 2
+        
+        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        result.fill(QColor(0, 0, 0, 0))
+        
+        # Convert angles to radians
+        ax = math.radians(rotate_x)
+        ay = math.radians(rotate_y)
+        
+        # Distance from camera (affects perspective strength)
+        focal_length = max(width, height) * 2
+        
+        for y in range(height):
+            for x in range(width):
+                # Normalize to center
+                nx = (x - cx) / zoom
+                ny = (y - cy) / zoom
+                nz = 0
+                
+                # Rotate around X axis
+                y1 = ny * math.cos(ax) - nz * math.sin(ax)
+                z1 = ny * math.sin(ax) + nz * math.cos(ax)
+                
+                # Rotate around Y axis
+                x2 = nx * math.cos(ay) + z1 * math.sin(ay)
+                z2 = -nx * math.sin(ay) + z1 * math.cos(ay)
+                
+                # Perspective projection
+                if focal_length + z2 > 0:
+                    scale = focal_length / (focal_length + z2)
+                    sx = x2 * scale + cx
+                    sy = y1 * scale + cy
+                    
+                    # Sample from source
+                    if 0 <= sx < width and 0 <= sy < height:
+                        sx_int = int(sx)
+                        sy_int = int(sy)
+                        result.setPixelColor(x, y, image.pixelColor(sx_int, sy_int))
+        
+        return result
+
+
+class PolarInversionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Polar Inversion")
+        layout = QVBoxLayout()
+        
+        # Amount
+        a_layout = QHBoxLayout()
+        a_layout.addWidget(QLabel("Amount:"))
+        self.a_slider = QSlider(Qt.Orientation.Horizontal)
+        self.a_slider.setRange(-100, 100)
+        self.a_slider.setValue(100)
+        a_layout.addWidget(self.a_slider)
+        self.a_val = QLabel("100")
+        self.a_slider.valueChanged.connect(lambda v: self.a_val.setText(str(v)))
+        a_layout.addWidget(self.a_val)
+        layout.addLayout(a_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+        
+    def get_config(self):
+        return {"amount": self.a_slider.value()}
+
+
+class PolarInversionEffect(Effect):
+    """Convert between rectangular and polar coordinates."""
+    name = "Polar Inversion"
+    category = "Distort"
+    
+    def create_dialog(self, parent) -> QDialog:
+        return PolarInversionDialog(parent)
+    
+    def apply(self, image: QImage, config: dict) -> QImage:
+        amount = config.get("amount", 100) / 100.0
+        
+        width = image.width()
+        height = image.height()
+        cx, cy = width / 2, height / 2
+        max_radius = math.sqrt(cx * cx + cy * cy)
+        
+        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        result.fill(QColor(0, 0, 0, 0))
+        
+        for y in range(height):
+            for x in range(width):
+                # Convert to polar
+                dx = x - cx
+                dy = y - cy
+                r = math.sqrt(dx * dx + dy * dy)
+                theta = math.atan2(dy, dx)
+                
+                if amount > 0:
+                    # Polar to rectangular
+                    # Map theta to x, radius to y
+                    sx = ((theta + math.pi) / (2 * math.pi)) * width
+                    sy = (r / max_radius) * height
+                else:
+                    # Rectangular to polar
+                    norm_x = x / width
+                    norm_y = y / height
+                    new_theta = norm_x * 2 * math.pi - math.pi
+                    new_r = norm_y * max_radius
+                    sx = cx + new_r * math.cos(new_theta)
+                    sy = cy + new_r * math.sin(new_theta)
+                
+                # Blend based on amount
+                blend = abs(amount)
+                fx = x * (1 - blend) + sx * blend
+                fy = y * (1 - blend) + sy * blend
+                
+                fx = int(max(0, min(width - 1, fx)))
+                fy = int(max(0, min(height - 1, fy)))
+                
+                result.setPixelColor(x, y, image.pixelColor(fx, fy))
+        
+        return result

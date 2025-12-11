@@ -180,6 +180,10 @@ class MainWindow(QMainWindow):
         select_menu.addAction("Select &All", lambda: self.active_document().select_all() if self.active_document() else None, QKeySequence.SelectAll)
         select_menu.addAction("&Deselect", lambda: self.active_document().clear_selection() if self.active_document() else None, QKeySequence("Ctrl+D"))
         select_menu.addAction("&Invert Selection", lambda: self.active_document().invert_selection() if self.active_document() else None, QKeySequence("Ctrl+I"))
+        select_menu.addSeparator()
+        select_menu.addAction("&Feather...", self.feather_selection)
+        select_menu.addAction("E&xpand...", self.expand_selection)
+        select_menu.addAction("&Contract...", self.contract_selection)
         
         # View
         view_menu = menu.addMenu("&View")
@@ -1039,3 +1043,39 @@ class MainWindow(QMainWindow):
         dlg.new_file.connect(self.new_document)
         
         dlg.exec()
+
+    def feather_selection(self):
+        """Open dialog to feather selection."""
+        doc = self.active_document()
+        if not doc or not doc.has_selection:
+            return
+        from PySide6.QtWidgets import QInputDialog
+        radius, ok = QInputDialog.getInt(self, "Feather Selection", "Radius (pixels):", 5, 1, 100)
+        if ok:
+            doc.feather_selection(radius)
+            if self.active_canvas():
+                self.active_canvas().update()
+
+    def expand_selection(self):
+        """Open dialog to expand selection."""
+        doc = self.active_document()
+        if not doc or not doc.has_selection:
+            return
+        from PySide6.QtWidgets import QInputDialog
+        amount, ok = QInputDialog.getInt(self, "Expand Selection", "Amount (pixels):", 5, 1, 100)
+        if ok:
+            doc.expand_selection(amount)
+            if self.active_canvas():
+                self.active_canvas().update()
+
+    def contract_selection(self):
+        """Open dialog to contract selection."""
+        doc = self.active_document()
+        if not doc or not doc.has_selection:
+            return
+        from PySide6.QtWidgets import QInputDialog
+        amount, ok = QInputDialog.getInt(self, "Contract Selection", "Amount (pixels):", 5, 1, 100)
+        if ok:
+            doc.contract_selection(amount)
+            if self.active_canvas():
+                self.active_canvas().update()
