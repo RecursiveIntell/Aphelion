@@ -23,8 +23,8 @@ class GradientTool(Tool):
     
     GRADIENT_NAMES = ["Linear", "Radial", "Conical", "Diamond", "Reflected"]
     
-    def __init__(self, session):
-        super().__init__(session)
+    def __init__(self, document, session):
+        super().__init__(document, session)
         self.gradient_type = self.LINEAR
         self.start_point = None
         self.end_point = None

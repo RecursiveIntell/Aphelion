@@ -11,8 +11,8 @@ class SmudgeTool(Tool):
     icon = "brush"  # Reuse brush icon for now
     shortcut = "U"
     
-    def __init__(self, session):
-        super().__init__(session)
+    def __init__(self, document, session):
+        super().__init__(document, session)
         self._drawing = False
         self._last_pos = None
         self._original_image = None
