@@ -1,5 +1,5 @@
-from src.core.plugins import AphelionPlugin, PluginType
-from src.core.effects import Effect
+from aphelion.core.plugins import AphelionPlugin, PluginType
+from aphelion.core.effects import Effect
 from PySide6.QtGui import QImage, QColor
 
 class SepiaEffect(Effect):

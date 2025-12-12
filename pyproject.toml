@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aphelion-editor"
-version = "0.1.0"
+version = "0.6.0"
 description = "A professional, layer-based image editor for Linux."
 readme = "README.md"
 authors = [
-  { name="Aphelion Team", email="team@aphelion.org" },
+  { name="RecursiveIntell", email="team@aphelion.org" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -21,15 +21,15 @@ dependencies = [
     "numpy>=1.20",
     "scipy>=1.7",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 
 [project.urls]
-"Homepage" = "https://github.com/aphelion/aphelion"
-"Bug Tracker" = "https://github.com/aphelion/aphelion/issues"
+"Homepage" = "https://github.com/RecursiveIntell/Aphelion"
+"Bug Tracker" = "https://github.com/RecursiveIntell/Aphelion/issues"
 
 [project.scripts]
-aphelion = "src.main:main"
+aphelion = "aphelion.app:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+where = ["src"]
+include = ["aphelion*"]

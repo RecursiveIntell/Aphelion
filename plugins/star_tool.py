@@ -1,5 +1,5 @@
-from src.core.plugins import AphelionPlugin, PluginType
-from src.tools.tool import Tool
+from aphelion.core.plugins import AphelionPlugin, PluginType
+from aphelion.tools.tool import Tool
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtCore import Qt, QPoint
 
@@ -21,7 +21,7 @@ class StarStampTool(Tool):
         # Let's adhere to "Direct Draw" for MVP plugin (destructive).
         # Or better: construct a CanvasCommand to capture before/after.
         
-        from src.core.commands import CanvasCommand
+        from aphelion.core.commands import CanvasCommand
         cmd = CanvasCommand(layer)
         
         painter = QPainter(layer.image)

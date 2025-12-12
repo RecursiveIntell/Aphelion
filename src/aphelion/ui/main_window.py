@@ -30,21 +30,22 @@ from ..core.autosave import AutosaveManager
 from .worker import Worker
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, settings=None, plugin_manager=None):
         super().__init__()
         self.setWindowTitle("Aphelion - Professional Paint for Linux")
         
-        # Settings
-        self.settings = SettingsManager()
+        # Settings (use provided or create new)
+        self.settings = settings if settings else SettingsManager()
         geometry = self.settings.get_value("window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
         else:
             self.resize(1280, 800)
         
-        # Apply theme from settings (ThemeManager handles all styles)
-        theme = self.settings.get_value("theme", "Dark")
-        ThemeManager.apply_theme(QApplication.instance(), theme)
+        # Theme is applied by AppController, but fallback here for standalone use
+        if not settings:
+            theme = self.settings.get_value("theme", "Dark")
+            ThemeManager.apply_theme(QApplication.instance(), theme)
         
         # Core Session
         self.session = Session()
@@ -114,8 +115,8 @@ class MainWindow(QMainWindow):
         # Init Effects
         register_all_effects()
         
-        # Init Plugins
-        self.plugin_manager = PluginManager()
+        # Init Plugins (use provided or create new)
+        self.plugin_manager = plugin_manager if plugin_manager else PluginManager()
         
         # Setup Context Callbacks
         self.plugin_manager.set_context_callbacks({

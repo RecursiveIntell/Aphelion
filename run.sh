@@ -1,4 +1,5 @@
 #!/bin/bash
 export QT_QPA_PLATFORM=xcb
 source venv/bin/activate
-python3 -m src.main
+export PYTHONPATH=src
+python3 -m aphelion

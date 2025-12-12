@@ -88,11 +88,16 @@ class ToolsDock(QWidget):
         
         btn = QPushButton()
         if icon_name:
-            # Assuming CWD is project root
-            icon_path = f"src/assets/icons/{icon_name}"
-            # Check existence or fallback?
-            btn.setIcon(QIcon(icon_path))
-            btn.setIconSize(QSize(24, 24))
+            # Use path relative to this module's location
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            icon_path = os.path.join(base_dir, "assets", "icons", icon_name)
+            # Fallback to text if icon doesn't exist
+            if os.path.exists(icon_path):
+                btn.setIcon(QIcon(icon_path))
+                btn.setIconSize(QSize(24, 24))
+            else:
+                btn.setText(name[:2])
         else:
             btn.setText(name[:2])
             

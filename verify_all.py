@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QImage, QColor
@@ -37,14 +37,14 @@ warnings = 0
 # ==== TEST 1: Core Imports ====
 print_header("1. Core Module Imports")
 try:
-    from src.core.document import Document
-    from src.core.layer import Layer
-    from src.core.session import Session
-    from src.core.history import HistoryManager
-    from src.core.io import ProjectIO
-    from src.core.effects import Effect, EffectRegistry
-    from src.core.plugins import PluginManager
-    from src.core.settings import SettingsManager
+    from aphelion.core.document import Document
+    from aphelion.core.layer import Layer
+    from aphelion.core.session import Session
+    from aphelion.core.history import HistoryManager
+    from aphelion.core.io import ProjectIO
+    from aphelion.core.effects import Effect, EffectRegistry
+    from aphelion.core.plugins import PluginManager
+    from aphelion.core.settings import SettingsManager
     print_ok("All core modules imported successfully")
     passed += 1
 except Exception as e:
@@ -54,7 +54,7 @@ except Exception as e:
 # ==== TEST 2: Effects Registration ====
 print_header("2. Effects Registration")
 try:
-    from src.effects import register_all_effects
+    from aphelion.effects import register_all_effects
     register_all_effects()
     effects = EffectRegistry.get_all()
     total = sum(len(effs) for effs in effects.values())
@@ -75,16 +75,16 @@ except Exception as e:
 # ==== TEST 3: Tool Imports ====
 print_header("3. Tool Imports")
 tools_to_check = [
-    ("BrushTool", "src.tools.brush"),
-    ("EraserTool", "src.tools.eraser"),
-    ("GradientTool", "src.tools.gradient"),
-    ("RecolorTool", "src.tools.recolor"),
-    ("CloneStampTool", "src.tools.clone_stamp"),
-    ("PencilTool", "src.tools.pencil"),
-    ("TextTool", "src.tools.text_tool"),
-    ("LineCurveTool", "src.tools.line_curve"),
-    ("ColorPickerTool", "src.tools.utility"),
-    ("ZoomTool", "src.tools.zoom"),
+    ("BrushTool", "aphelion.tools.brush"),
+    ("EraserTool", "aphelion.tools.eraser"),
+    ("GradientTool", "aphelion.tools.gradient"),
+    ("RecolorTool", "aphelion.tools.recolor"),
+    ("CloneStampTool", "aphelion.tools.clone_stamp"),
+    ("PencilTool", "aphelion.tools.pencil"),
+    ("TextTool", "aphelion.tools.text_tool"),
+    ("LineCurveTool", "aphelion.tools.line_curve"),
+    ("ColorPickerTool", "aphelion.tools.utility"),
+    ("ZoomTool", "aphelion.tools.zoom"),
 ]
 tool_count = 0
 for tool_name, module_path in tools_to_check:
@@ -136,9 +136,9 @@ try:
     test_image.fill(QColor(100, 100, 100))
     
     # Test a few effects
-    from src.effects.adjustments import InvertEffect
-    from src.effects.blurs import GaussianBlurEffect
-    from src.effects.artistic import PencilSketchEffect
+    from aphelion.effects.adjustments import InvertEffect
+    from aphelion.effects.blurs import GaussianBlurEffect
+    from aphelion.effects.artistic import PencilSketchEffect
     
     invert = InvertEffect()
     result = invert.apply(test_image, {})
@@ -182,7 +182,7 @@ except Exception as e:
 # ==== TEST 7: Theme Manager ====
 print_header("7. Theme Manager")
 try:
-    from src.ui.theme import ThemeManager, DARK_THEME_QSS, LIGHT_THEME_QSS
+    from aphelion.ui.theme import ThemeManager, DARK_THEME_QSS, LIGHT_THEME_QSS
     
     assert len(DARK_THEME_QSS) > 100, "Dark theme QSS too short"
     assert len(LIGHT_THEME_QSS) > 100, "Light theme QSS too short"
@@ -215,10 +215,10 @@ except Exception as e:
 # ==== TEST 9: UI Panel Imports ====
 print_header("9. UI Panel Imports")
 try:
-    from src.ui.panels.tools_dock import ToolsDock
-    from src.ui.panels.colors_panel import ColorsPanel
-    from src.ui.panels.history_panel import HistoryPanel
-    from src.ui.layer_panel import LayerPanel
+    from aphelion.ui.panels.tools_dock import ToolsDock
+    from aphelion.ui.panels.colors_panel import ColorsPanel
+    from aphelion.ui.panels.history_panel import HistoryPanel
+    from aphelion.ui.layer_panel import LayerPanel
     
     print_ok("All UI panels imported successfully")
     passed += 1
@@ -229,8 +229,8 @@ except Exception as e:
 # ==== TEST 10: Tablet Pressure Support ====
 print_header("10. Tablet Pressure Support")
 try:
-    from src.tools.brush import BrushTool
-    from src.tools.eraser import EraserTool
+    from aphelion.tools.brush import BrushTool
+    from aphelion.tools.eraser import EraserTool
     
     tool = BrushTool(None, None)
     assert hasattr(tool, 'pressure_enabled'), "BrushTool missing pressure_enabled"
