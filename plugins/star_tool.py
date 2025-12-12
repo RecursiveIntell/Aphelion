@@ -65,4 +65,4 @@ class StarPlugin(AphelionPlugin):
         register_tool = context.get("register_tool")
         if register_tool:
             # We don't have an icon, so it will use "St" text
-            register_tool("Star Stamp", StarStampTool, None, "X")
+            register_tool("Star Stamp", StarStampTool, None, "Y")

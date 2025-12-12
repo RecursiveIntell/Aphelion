@@ -1,10 +1,14 @@
 """
 Distortion and stylize effects for Aphelion.
+
+Optimized with NumPy for high-performance coordinate mapping.
 """
 from PySide6.QtGui import QImage, QColor
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QSpinBox
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage
+import numpy as np
 import math
 import random
 
@@ -46,45 +50,22 @@ class PixelateEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         cell_size = config.get("cell_size", 8)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
+        # Downsample then upsample for pixelation effect
+        small_h = max(1, height // cell_size)
+        small_w = max(1, width // cell_size)
+        
+        # Average each cell
+        result = arr.copy()
         for cy in range(0, height, cell_size):
             for cx in range(0, width, cell_size):
-                # Average color in cell
-                r_sum = g_sum = b_sum = a_sum = 0
-                count = 0
-                
-                for dy in range(cell_size):
-                    for dx in range(cell_size):
-                        x = cx + dx
-                        y = cy + dy
-                        if x < width and y < height:
-                            c = image.pixelColor(x, y)
-                            r_sum += c.red()
-                            g_sum += c.green()
-                            b_sum += c.blue()
-                            a_sum += c.alpha()
-                            count += 1
-                
-                if count > 0:
-                    avg_color = QColor(
-                        r_sum // count,
-                        g_sum // count,
-                        b_sum // count,
-                        a_sum // count
-                    )
-                    
-                    # Fill cell with average
-                    for dy in range(cell_size):
-                        for dx in range(cell_size):
-                            x = cx + dx
-                            y = cy + dy
-                            if x < width and y < height:
-                                result.setPixelColor(x, y, avg_color)
+                cell = arr[cy:min(cy+cell_size, height), cx:min(cx+cell_size, width)]
+                avg_color = cell.mean(axis=(0, 1)).astype(np.uint8)
+                result[cy:min(cy+cell_size, height), cx:min(cx+cell_size, width)] = avg_color
         
-        return result
+        return numpy_to_qimage(result)
 
 
 class EmbossEffect(Effect):
@@ -93,40 +74,27 @@ class EmbossEffect(Effect):
     category = "Stylize"
     
     def apply(self, image: QImage, config: dict) -> QImage:
+        arr = qimage_to_numpy(image)
+        
         # Emboss kernel
-        kernel = [
-            [-2, -1, 0],
-            [-1,  1, 1],
-            [ 0,  1, 2]
-        ]
+        kernel = np.array([[-2, -1, 0], [-1, 1, 1], [0, 1, 2]], dtype=np.float32)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        result = arr.copy().astype(np.float32)
         
-        for y in range(1, height - 1):
-            for x in range(1, width - 1):
-                r_sum = g_sum = b_sum = 0
-                
-                for ky in range(3):
-                    for kx in range(3):
-                        px = x + kx - 1
-                        py = y + ky - 1
-                        c = image.pixelColor(px, py)
-                        weight = kernel[ky][kx]
-                        
-                        r_sum += c.red() * weight
-                        g_sum += c.green() * weight
-                        b_sum += c.blue() * weight
-                
-                # Add 128 to shift to middle gray
-                r = max(0, min(255, r_sum + 128))
-                g = max(0, min(255, g_sum + 128))
-                b = max(0, min(255, b_sum + 128))
-                
-                result.setPixelColor(x, y, QColor(r, g, b, image.pixelColor(x, y).alpha()))
+        # Apply convolution to RGB channels
+        for c in range(3):
+            channel = arr[:, :, c].astype(np.float32)
+            padded = np.pad(channel, 1, mode='edge')
+            
+            conv_result = np.zeros_like(channel)
+            for ky in range(3):
+                for kx in range(3):
+                    conv_result += padded[ky:ky+channel.shape[0], kx:kx+channel.shape[1]] * kernel[ky, kx]
+            
+            result[:, :, c] = conv_result + 128
         
-        return result
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        return numpy_to_qimage(result)
 
 
 class EdgeDetectEffect(Effect):
@@ -135,32 +103,38 @@ class EdgeDetectEffect(Effect):
     category = "Stylize"
     
     def apply(self, image: QImage, config: dict) -> QImage:
+        arr = qimage_to_numpy(image)
+        
+        # Convert to grayscale
+        gray = (arr[:, :, 0].astype(np.float32) + 
+                arr[:, :, 1].astype(np.float32) + 
+                arr[:, :, 2].astype(np.float32)) / 3
+        
         # Sobel kernels
-        gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
-        gy = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
+        gx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+        gy = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        padded = np.pad(gray, 1, mode='edge')
         
-        for y in range(1, height - 1):
-            for x in range(1, width - 1):
-                rx, ry = 0, 0
-                
-                for ky in range(3):
-                    for kx in range(3):
-                        px = x + kx - 1
-                        py = y + ky - 1
-                        c = image.pixelColor(px, py)
-                        gray = (c.red() + c.green() + c.blue()) // 3
-                        
-                        rx += gray * gx[ky][kx]
-                        ry += gray * gy[ky][kx]
-                
-                magnitude = int(min(255, math.sqrt(rx*rx + ry*ry)))
-                result.setPixelColor(x, y, QColor(magnitude, magnitude, magnitude, image.pixelColor(x, y).alpha()))
+        grad_x = np.zeros_like(gray)
+        grad_y = np.zeros_like(gray)
         
-        return result
+        for ky in range(3):
+            for kx in range(3):
+                shifted = padded[ky:ky+gray.shape[0], kx:kx+gray.shape[1]]
+                grad_x += shifted * gx[ky, kx]
+                grad_y += shifted * gy[ky, kx]
+        
+        magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        magnitude = np.clip(magnitude, 0, 255).astype(np.uint8)
+        
+        # Create grayscale output
+        result = arr.copy()
+        result[:, :, 0] = magnitude
+        result[:, :, 1] = magnitude
+        result[:, :, 2] = magnitude
+        
+        return numpy_to_qimage(result)
 
 
 class AddNoiseDialog(QDialog):
@@ -203,22 +177,17 @@ class AddNoiseEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         intensity = config.get("intensity", 25)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                noise = random.randint(-intensity, intensity)
-                
-                r = max(0, min(255, c.red() + noise))
-                g = max(0, min(255, c.green() + noise))
-                b = max(0, min(255, c.blue() + noise))
-                
-                result.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
+        # Generate noise
+        noise = np.random.randint(-intensity, intensity + 1, (height, width, 3), dtype=np.int16)
         
-        return result
+        result = arr.astype(np.int16)
+        result[:, :, :3] += noise
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return numpy_to_qimage(result)
 
 
 class ReduceNoiseEffect(Effect):
@@ -227,35 +196,25 @@ class ReduceNoiseEffect(Effect):
     category = "Noise"
     
     def apply(self, image: QImage, config: dict) -> QImage:
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
+        result = arr.copy()
         
-        for y in range(1, height - 1):
-            for x in range(1, width - 1):
-                r_vals = []
-                g_vals = []
-                b_vals = []
-                
-                # 3x3 neighborhood
-                for dy in range(-1, 2):
-                    for dx in range(-1, 2):
-                        c = image.pixelColor(x + dx, y + dy)
-                        r_vals.append(c.red())
-                        g_vals.append(c.green())
-                        b_vals.append(c.blue())
-                
-                # Median
-                r_vals.sort()
-                g_vals.sort()
-                b_vals.sort()
-                
-                result.setPixelColor(x, y, QColor(
-                    r_vals[4], g_vals[4], b_vals[4],
-                    image.pixelColor(x, y).alpha()
-                ))
+        # 3x3 median filter
+        radius = 1
+        window_size = 3
         
-        return result
+        for c in range(3):
+            padded = np.pad(arr[:, :, c], radius, mode='edge')
+            neighborhoods = np.lib.stride_tricks.sliding_window_view(
+                padded, (window_size, window_size)
+            )
+            result[:, :, c] = np.median(
+                neighborhoods.reshape(height, width, -1), 
+                axis=2
+            ).astype(np.uint8)
+        
+        return numpy_to_qimage(result)
 
 
 class RadialBlurDialog(QDialog):
@@ -295,43 +254,33 @@ class RadialBlurEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 10)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        cx = width // 2
-        cy = height // 2
+        cx, cy = width / 2, height / 2
         
-        for y in range(height):
-            for x in range(width):
-                r_sum = g_sum = b_sum = a_sum = 0.0
-                
-                for i in range(amount):
-                    angle = (i / amount) * 0.05  # Small rotation
-                    cos_a = math.cos(angle)
-                    sin_a = math.sin(angle)
-                    
-                    # Rotate around center
-                    dx = x - cx
-                    dy = y - cy
-                    sx = int(cx + dx * cos_a - dy * sin_a)
-                    sy = int(cy + dx * sin_a + dy * cos_a)
-                    
-                    if 0 <= sx < width and 0 <= sy < height:
-                        c = image.pixelColor(sx, sy)
-                        r_sum += c.red()
-                        g_sum += c.green()
-                        b_sum += c.blue()
-                        a_sum += c.alpha()
-                
-                result.setPixelColor(x, y, QColor(
-                    int(r_sum / amount),
-                    int(g_sum / amount),
-                    int(b_sum / amount),
-                    int(a_sum / amount)
-                ))
+        # Create coordinate grids
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        result = np.zeros_like(arr, dtype=np.float32)
+        
+        for i in range(amount):
+            angle = (i / amount) * 0.05
+            cos_a, sin_a = np.cos(angle), np.sin(angle)
+            
+            dx = x_coords - cx
+            dy = y_coords - cy
+            
+            sx = (cx + dx * cos_a - dy * sin_a).astype(np.int32)
+            sy = (cy + dx * sin_a + dy * cos_a).astype(np.int32)
+            
+            sx = np.clip(sx, 0, width - 1)
+            sy = np.clip(sy, 0, height - 1)
+            
+            result += arr[sy, sx].astype(np.float32)
+        
+        result = (result / amount).astype(np.uint8)
+        return numpy_to_qimage(result)
 
 
 class ZoomBlurDialog(QDialog):
@@ -371,43 +320,29 @@ class ZoomBlurEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 20)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        cx = width // 2
-        cy = height // 2
-        
+        cx, cy = width / 2, height / 2
         samples = max(2, amount // 5)
         
-        for y in range(height):
-            for x in range(width):
-                r_sum = g_sum = b_sum = a_sum = 0
-                
-                for i in range(samples):
-                    # Scale factor from center
-                    scale = 1.0 - (i / samples) * (amount / 100.0)
-                    
-                    sx = int(cx + (x - cx) * scale)
-                    sy = int(cy + (y - cy) * scale)
-                    
-                    sx = max(0, min(width - 1, sx))
-                    sy = max(0, min(height - 1, sy))
-                    
-                    c = image.pixelColor(sx, sy)
-                    r_sum += c.red()
-                    g_sum += c.green()
-                    b_sum += c.blue()
-                    a_sum += c.alpha()
-                
-                result.setPixelColor(x, y, QColor(
-                    r_sum // samples,
-                    g_sum // samples,
-                    b_sum // samples,
-                    a_sum // samples
-                ))
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        result = np.zeros_like(arr, dtype=np.float32)
+        
+        for i in range(samples):
+            scale = 1.0 - (i / samples) * (amount / 100.0)
+            
+            sx = (cx + (x_coords - cx) * scale).astype(np.int32)
+            sy = (cy + (y_coords - cy) * scale).astype(np.int32)
+            
+            sx = np.clip(sx, 0, width - 1)
+            sy = np.clip(sy, 0, height - 1)
+            
+            result += arr[sy, sx].astype(np.float32)
+        
+        result = (result / samples).astype(np.uint8)
+        return numpy_to_qimage(result)
 
 
 class BulgeDialog(QDialog):
@@ -447,34 +382,35 @@ class BulgeEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 50) / 100.0
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        cx = width / 2
-        cy = height / 2
+        cx, cy = width / 2, height / 2
         radius = min(cx, cy)
         
-        for y in range(height):
-            for x in range(width):
-                dx = x - cx
-                dy = y - cy
-                dist = math.sqrt(dx*dx + dy*dy)
-                
-                if dist < radius and dist > 0:
-                    # Bulge formula
-                    factor = (1 - (dist / radius)) * amount
-                    new_dist = dist * (1 - factor)
-                    
-                    sx = int(cx + dx * (new_dist / dist))
-                    sy = int(cy + dy * (new_dist / dist))
-                    
-                    sx = max(0, min(width - 1, sx))
-                    sy = max(0, min(height - 1, sy))
-                    
-                    result.setPixelColor(x, y, image.pixelColor(sx, sy))
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        dx = x_coords - cx
+        dy = y_coords - cy
+        dist = np.sqrt(dx**2 + dy**2)
+        
+        # Bulge formula
+        mask = (dist < radius) & (dist > 0)
+        factor = np.zeros_like(dist)
+        factor[mask] = (1 - (dist[mask] / radius)) * amount
+        new_dist = np.where(mask, dist * (1 - factor), dist)
+        
+        scale = np.ones_like(dist)
+        scale[mask] = new_dist[mask] / dist[mask]
+        
+        sx = (cx + dx * scale).astype(np.int32)
+        sy = (cy + dy * scale).astype(np.int32)
+        
+        sx = np.clip(sx, 0, width - 1)
+        sy = np.clip(sy, 0, height - 1)
+        
+        result = arr[sy, sx]
+        return numpy_to_qimage(result)
 
 
 class TwistDialog(QDialog):
@@ -514,36 +450,32 @@ class TwistEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         angle = math.radians(config.get("angle", 45))
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        cx = width / 2
-        cy = height / 2
+        cx, cy = width / 2, height / 2
         radius = min(cx, cy)
         
-        for y in range(height):
-            for x in range(width):
-                dx = x - cx
-                dy = y - cy
-                dist = math.sqrt(dx*dx + dy*dy)
-                
-                if dist < radius:
-                    # Twist amount decreases with distance from center
-                    twist = angle * (1 - dist / radius)
-                    
-                    cos_t = math.cos(twist)
-                    sin_t = math.sin(twist)
-                    
-                    sx = int(cx + dx * cos_t - dy * sin_t)
-                    sy = int(cy + dx * sin_t + dy * cos_t)
-                    
-                    sx = max(0, min(width - 1, sx))
-                    sy = max(0, min(height - 1, sy))
-                    
-                    result.setPixelColor(x, y, image.pixelColor(sx, sy))
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        dx = x_coords - cx
+        dy = y_coords - cy
+        dist = np.sqrt(dx**2 + dy**2)
+        
+        # Twist amount decreases with distance from center
+        twist = np.where(dist < radius, angle * (1 - dist / radius), 0)
+        
+        cos_t = np.cos(twist)
+        sin_t = np.sin(twist)
+        
+        sx = (cx + dx * cos_t - dy * sin_t).astype(np.int32)
+        sy = (cy + dx * sin_t + dy * cos_t).astype(np.int32)
+        
+        sx = np.clip(sx, 0, width - 1)
+        sy = np.clip(sy, 0, height - 1)
+        
+        result = arr[sy, sx]
+        return numpy_to_qimage(result)
 
 
 class DentsDialog(QDialog):
@@ -592,28 +524,20 @@ class DentsEffect(Effect):
         amount = config.get("amount", 10)
         scale = config.get("scale", 20)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        # Generate displacement map using simple noise
-        random.seed(42)  # Reproducible results
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        for y in range(height):
-            for x in range(width):
-                # Use sine waves for smooth dents
-                dx = int(amount * math.sin(y / scale * 2 * math.pi))
-                dy = int(amount * math.sin(x / scale * 2 * math.pi))
-                
-                sx = x + dx
-                sy = y + dy
-                
-                sx = max(0, min(width - 1, sx))
-                sy = max(0, min(height - 1, sy))
-                
-                result.setPixelColor(x, y, image.pixelColor(sx, sy))
+        # Use sine waves for smooth dents
+        dx = (amount * np.sin(y_coords / scale * 2 * np.pi)).astype(np.int32)
+        dy = (amount * np.sin(x_coords / scale * 2 * np.pi)).astype(np.int32)
         
-        return result
+        sx = np.clip(x_coords.astype(np.int32) + dx, 0, width - 1)
+        sy = np.clip(y_coords.astype(np.int32) + dy, 0, height - 1)
+        
+        result = arr[sy, sx]
+        return numpy_to_qimage(result)
 
 
 class Rotate3DDialog(QDialog):
@@ -685,48 +609,48 @@ class Rotate3DEffect(Effect):
         rotate_y = config.get("rotate_y", 0)
         zoom = config.get("zoom", 100) / 100.0
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         cx, cy = width / 2, height / 2
         
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        result.fill(QColor(0, 0, 0, 0))
+        result = np.zeros_like(arr)
         
-        # Convert angles to radians
         ax = math.radians(rotate_x)
         ay = math.radians(rotate_y)
         
-        # Distance from camera (affects perspective strength)
         focal_length = max(width, height) * 2
         
-        for y in range(height):
-            for x in range(width):
-                # Normalize to center
-                nx = (x - cx) / zoom
-                ny = (y - cy) / zoom
-                nz = 0
-                
-                # Rotate around X axis
-                y1 = ny * math.cos(ax) - nz * math.sin(ax)
-                z1 = ny * math.sin(ax) + nz * math.cos(ax)
-                
-                # Rotate around Y axis
-                x2 = nx * math.cos(ay) + z1 * math.sin(ay)
-                z2 = -nx * math.sin(ay) + z1 * math.cos(ay)
-                
-                # Perspective projection
-                if focal_length + z2 > 0:
-                    scale = focal_length / (focal_length + z2)
-                    sx = x2 * scale + cx
-                    sy = y1 * scale + cy
-                    
-                    # Sample from source
-                    if 0 <= sx < width and 0 <= sy < height:
-                        sx_int = int(sx)
-                        sy_int = int(sy)
-                        result.setPixelColor(x, y, image.pixelColor(sx_int, sy_int))
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        # Normalize to center
+        nx = (x_coords - cx) / zoom
+        ny = (y_coords - cy) / zoom
+        nz = np.zeros_like(nx)
+        
+        # Rotate around X axis
+        y1 = ny * np.cos(ax) - nz * np.sin(ax)
+        z1 = ny * np.sin(ax) + nz * np.cos(ax)
+        
+        # Rotate around Y axis
+        x2 = nx * np.cos(ay) + z1 * np.sin(ay)
+        z2 = -nx * np.sin(ay) + z1 * np.cos(ay)
+        
+        # Perspective projection
+        valid = (focal_length + z2) > 0
+        scale = np.where(valid, focal_length / (focal_length + z2), 1)
+        
+        sx = (x2 * scale + cx).astype(np.int32)
+        sy = (y1 * scale + cy).astype(np.int32)
+        
+        # Check bounds and sample
+        valid_mask = valid & (sx >= 0) & (sx < width) & (sy >= 0) & (sy < height)
+        
+        for i in range(height):
+            for j in range(width):
+                if valid_mask[i, j]:
+                    result[i, j] = arr[sy[i, j], sx[i, j]]
+        
+        return numpy_to_qimage(result)
 
 
 class PolarInversionDialog(QDialog):
@@ -768,44 +692,96 @@ class PolarInversionEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 100) / 100.0
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         cx, cy = width / 2, height / 2
-        max_radius = math.sqrt(cx * cx + cy * cy)
+        max_radius = np.sqrt(cx * cx + cy * cy)
         
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        result.fill(QColor(0, 0, 0, 0))
+        result = np.zeros_like(arr)
         
-        for y in range(height):
-            for x in range(width):
-                # Convert to polar
-                dx = x - cx
-                dy = y - cy
-                r = math.sqrt(dx * dx + dy * dy)
-                theta = math.atan2(dy, dx)
-                
-                if amount > 0:
-                    # Polar to rectangular
-                    # Map theta to x, radius to y
-                    sx = ((theta + math.pi) / (2 * math.pi)) * width
-                    sy = (r / max_radius) * height
-                else:
-                    # Rectangular to polar
-                    norm_x = x / width
-                    norm_y = y / height
-                    new_theta = norm_x * 2 * math.pi - math.pi
-                    new_r = norm_y * max_radius
-                    sx = cx + new_r * math.cos(new_theta)
-                    sy = cy + new_r * math.sin(new_theta)
-                
-                # Blend based on amount
-                blend = abs(amount)
-                fx = x * (1 - blend) + sx * blend
-                fy = y * (1 - blend) + sy * blend
-                
-                fx = int(max(0, min(width - 1, fx)))
-                fy = int(max(0, min(height - 1, fy)))
-                
-                result.setPixelColor(x, y, image.pixelColor(fx, fy))
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
         
-        return result
+        if amount > 0:
+            # Rectangular to Polar
+            dx = x_coords - cx
+            dy = y_coords - cy
+            r = np.sqrt(dx * dx + dy * dy)
+            theta = np.arctan2(dy, dx)
+            
+            sx = ((theta + np.pi) / (2 * np.pi) * width).astype(np.int32)
+            sy = (r / max_radius * height).astype(np.int32)
+        else:
+            # Polar to Rectangular
+            norm_x = x_coords / width
+            norm_y = y_coords / height
+            new_theta = norm_x * 2 * np.pi - np.pi
+            new_r = norm_y * max_radius
+            
+            sx = (cx + new_r * np.cos(new_theta)).astype(np.int32)
+            sy = (cy + new_r * np.sin(new_theta)).astype(np.int32)
+        
+        sx = np.clip(sx, 0, width - 1)
+        sy = np.clip(sy, 0, height - 1)
+        
+        result = arr[sy, sx]
+        return numpy_to_qimage(result)
+
+
+class FrostedGlassDialog(QDialog):
+    """Dialog for Frosted Glass effect."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Frosted Glass")
+        
+        layout = QVBoxLayout()
+        
+        # Amount (scatter radius)
+        a_layout = QHBoxLayout()
+        a_layout.addWidget(QLabel("Amount:"))
+        self.a_spin = QSpinBox()
+        self.a_spin.setRange(1, 20)
+        self.a_spin.setValue(4)
+        a_layout.addWidget(self.a_spin)
+        layout.addLayout(a_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        self.setLayout(layout)
+    
+    def get_config(self):
+        return {"amount": self.a_spin.value()}
+
+
+class FrostedGlassEffect(Effect):
+    """Frosted/etched glass effect - randomly scatters pixels to create frosted appearance."""
+    name = "Frosted Glass"
+    category = "Distort"
+    
+    def create_dialog(self, parent) -> QDialog:
+        return FrostedGlassDialog(parent)
+    
+    def apply(self, image: QImage, config: dict) -> QImage:
+        amount = config.get("amount", 4)
+        
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
+        
+        # Create random offsets within the scatter radius
+        np.random.seed(42)  # For reproducibility
+        offset_x = np.random.randint(-amount, amount + 1, size=(height, width))
+        offset_y = np.random.randint(-amount, amount + 1, size=(height, width))
+        
+        # Create coordinate grids
+        y_coords, x_coords = np.mgrid[0:height, 0:width]
+        
+        # Apply offsets
+        src_x = np.clip(x_coords + offset_x, 0, width - 1)
+        src_y = np.clip(y_coords + offset_y, 0, height - 1)
+        
+        # Sample from offset positions
+        result = arr[src_y, src_x]
+        
+        return numpy_to_qimage(result)

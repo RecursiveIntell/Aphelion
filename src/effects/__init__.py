@@ -1,19 +1,21 @@
 from ..core.effects import EffectRegistry
 from .adjustments import (InvertEffect, BrightnessContrastEffect, HueSaturationEffect, 
                           AutoLevelEffect, InvertAlphaEffect, ColorBalanceEffect)
-from .blurs import GaussianBlurEffect, SharpenEffect, MotionBlurEffect, SepiaEffect, MedianEffect
+from .blurs import (GaussianBlurEffect, SharpenEffect, MotionBlurEffect, SepiaEffect, 
+                    MedianEffect, UnfocusEffect)
 from .distort import (PixelateEffect, EmbossEffect, EdgeDetectEffect, 
                       AddNoiseEffect, ReduceNoiseEffect, RadialBlurEffect,
                       ZoomBlurEffect, BulgeEffect, TwistEffect, DentsEffect,
-                      Rotate3DEffect, PolarInversionEffect)
+                      Rotate3DEffect, PolarInversionEffect, FrostedGlassEffect)
 from .photo import (CurvesEffect, LevelsEffect, VignetteEffect, 
                     OilPaintingEffect, PosterizeEffect, BlackWhiteEffect,
                     RedEyeRemovalEffect, SurfaceBlurEffect)
 from .render import (GlowEffect, OutlineEffect, FragmentEffect, 
-                     CloudsEffect, TileReflectionEffect)
+                     CloudsEffect, TileReflectionEffect, 
+                     JuliaFractalEffect, MandelbrotFractalEffect)
 from .artistic import PencilSketchEffect, InkSketchEffect, CrystallizeEffect
 from .stylize import (DropShadowEffect, ChannelShiftEffect, 
-                      BokehBlurEffect, SketchBlurEffect)
+                      BokehBlurEffect, SketchBlurEffect, ReliefEffect)
 
 def register_all_effects():
     # Adjustments (11)
@@ -29,7 +31,7 @@ def register_all_effects():
     EffectRegistry.register(BlackWhiteEffect)
     EffectRegistry.register(ColorBalanceEffect)
     
-    # Blurs (9)
+    # Blurs (10)
     EffectRegistry.register(GaussianBlurEffect)
     EffectRegistry.register(SharpenEffect)
     EffectRegistry.register(MotionBlurEffect)
@@ -39,8 +41,9 @@ def register_all_effects():
     EffectRegistry.register(MedianEffect)
     EffectRegistry.register(BokehBlurEffect)
     EffectRegistry.register(SketchBlurEffect)
+    EffectRegistry.register(UnfocusEffect)
     
-    # Distort (8)
+    # Distort (9)
     EffectRegistry.register(PixelateEffect)
     EffectRegistry.register(BulgeEffect)
     EffectRegistry.register(TwistEffect)
@@ -49,14 +52,16 @@ def register_all_effects():
     EffectRegistry.register(Rotate3DEffect)
     EffectRegistry.register(PolarInversionEffect)
     EffectRegistry.register(CrystallizeEffect)
+    EffectRegistry.register(FrostedGlassEffect)
     
-    # Stylize (6)
+    # Stylize (7)
     EffectRegistry.register(EmbossEffect)
     EffectRegistry.register(EdgeDetectEffect)
     EffectRegistry.register(OutlineEffect)
     EffectRegistry.register(FragmentEffect)
     EffectRegistry.register(DropShadowEffect)
     EffectRegistry.register(ChannelShiftEffect)
+    EffectRegistry.register(ReliefEffect)
     
     # Noise (2)
     EffectRegistry.register(AddNoiseEffect)
@@ -72,5 +77,7 @@ def register_all_effects():
     EffectRegistry.register(PencilSketchEffect)
     EffectRegistry.register(InkSketchEffect)
     
-    # Render (1)
+    # Render (3)
     EffectRegistry.register(CloudsEffect)
+    EffectRegistry.register(JuliaFractalEffect)
+    EffectRegistry.register(MandelbrotFractalEffect)

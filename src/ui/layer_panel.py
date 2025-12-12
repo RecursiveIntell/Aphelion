@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout, 
                                QListWidgetItem, QCheckBox, QSlider, QComboBox, QLabel, QMenu, QInputDialog)
-from PySide6.QtGui import QPainter, QAction, QCursor
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter, QAction, QCursor, QIcon, QPixmap, QImage, QColor
+from PySide6.QtCore import Qt, QSize
 from ..core.document import Document
 from ..core.layer import Layer
 from ..core.commands import LayerPropertyCommand, LayerStructureCommand
+
+THUMBNAIL_SIZE = 48
 
 BLK_MODES = {
     "Normal": QPainter.CompositionMode.CompositionMode_SourceOver,
@@ -97,6 +99,7 @@ class LayerPanel(QWidget):
         
         # List
         self.list_widget = QListWidget()
+        self.list_widget.setIconSize(QSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE))
         self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.list_widget.itemChanged.connect(self.on_item_changed) # For checkbox
@@ -121,6 +124,9 @@ class LayerPanel(QWidget):
              self.refresh()
 
     def refresh(self):
+        # Block signals to prevent on_item_changed triggering during list population
+        self.list_widget.blockSignals(True)
+        
         self.list_widget.clear()
         # Document layers are bottom to top (0..N).
         # List widget should probably show Top to Bottom?
@@ -130,6 +136,12 @@ class LayerPanel(QWidget):
         for i in range(len(self.document.layers) - 1, -1, -1):
             layer = self.document.layers[i]
             item = QListWidgetItem(self.list_widget)
+            
+            # Generate thumbnail
+            thumbnail = self._generate_thumbnail(layer)
+            if thumbnail:
+                item.setIcon(QIcon(thumbnail))
+            
             if layer.is_adjustment:
                 item.setText(f"⚡ {layer.name}")
                 font = item.font()
@@ -145,13 +157,54 @@ class LayerPanel(QWidget):
             # Associating data? 
             # We can use item.setData(Qt.UserRole, i) for index logic
             item.setData(Qt.UserRole, i)
-            
+        
+        # Restore signals
+        self.list_widget.blockSignals(False)
+        
         # Restore selection
         # active_index = self.document._active_layer_index
         # But list is reversed. 
         # index 0 in list = index N-1 in doc.
         # list_index = (N-1) - doc_index
         self.update_selection_from_model()
+    
+    def _generate_thumbnail(self, layer: Layer) -> QPixmap:
+        """Generate a scaled thumbnail for a layer."""
+        if layer.is_adjustment:
+            # For adjustment layers, create a simple icon
+            thumb = QPixmap(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+            thumb.fill(QColor(100, 100, 200))  # Blue for adjustment
+            return thumb
+        
+        if not layer.image or layer.image.isNull():
+            return None
+        
+        # Scale layer image to thumbnail size
+        scaled = layer.image.scaled(
+            THUMBNAIL_SIZE, THUMBNAIL_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation
+        )
+        
+        # Create checkerboard background for transparency
+        thumb = QPixmap(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+        painter = QPainter(thumb)
+        
+        # Draw checkerboard
+        checker_size = 8
+        for y in range(0, THUMBNAIL_SIZE, checker_size):
+            for x in range(0, THUMBNAIL_SIZE, checker_size):
+                color = QColor(200, 200, 200) if (x // checker_size + y // checker_size) % 2 == 0 else QColor(255, 255, 255)
+                painter.fillRect(x, y, checker_size, checker_size, color)
+        
+        # Draw scaled image centered
+        x_offset = (THUMBNAIL_SIZE - scaled.width()) // 2
+        y_offset = (THUMBNAIL_SIZE - scaled.height()) // 2
+        painter.drawImage(x_offset, y_offset, scaled)
+        painter.end()
+        
+        return thumb
+
 
     def update_selection_from_model(self):
          doc_index = self.document._active_layer_index

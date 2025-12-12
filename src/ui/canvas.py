@@ -9,13 +9,15 @@ class CanvasWidget(QWidget):
     cursor_moved = Signal(QPoint)
     zoom_changed = Signal(float)
     
-    def __init__(self, document: Document, parent=None):
+    def __init__(self, document: Document, parent=None, session=None):
         super().__init__(parent)
         self.document = document
+        self.session = session  # For keyboard shortcuts
         self.scale = 1.0
         self.offset = QPoint(0, 0)
         
         self.setMouseTracking(True) # Required for mouse move without click
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Enable keyboard input
         
         # Subscribe to document changes to trigger repaints
         self.document.content_changed.connect(self.update)
@@ -193,3 +195,14 @@ class CanvasWidget(QWidget):
         if self.active_tool:
             world_pos = self.map_to_doc(event.position().toPoint())
             self.active_tool.mouse_release(world_pos)
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts when canvas has focus."""
+        # X - Swap colors (Paint.NET style)
+        if event.key() == Qt.Key.Key_X and not event.modifiers():
+            if self.session:
+                print("DEBUG: X pressed in canvas - swapping colors!")
+                self.session.swap_colors()
+                event.accept()
+                return
+        super().keyPressEvent(event)

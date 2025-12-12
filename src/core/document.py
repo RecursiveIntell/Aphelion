@@ -4,6 +4,10 @@ from .layer import Layer
 from .history import HistoryManager
 from .commands import DocumentPropertyCommand, SelectionCommand, LayerStructureCommand, MacroCommand, CanvasCommand
 from PySide6.QtGui import QTransform
+from ..utils.image_processing import (
+    qimage_alpha8_to_numpy, numpy_to_qimage_alpha8,
+    gaussian_blur_np, morphological_dilate, morphological_erode
+)
 
 class Document(QObject):
     # Signals to notify UI
@@ -301,15 +305,6 @@ class Document(QObject):
              pass
              
         # Composition Loop
-        # We need to handle adjustment layers.
-        # Logic: adjustment layers apply to everything below them.
-        # This implies we might need intermediate buffers or careful composition.
-        # "Pass-through" mode? 
-        # Actually, simpler:
-        # Start with bottom layer.
-        # If normal layer: composite on top.
-        # If adjustment layer: apply effect to current composite.
-        
         for layer in self.layers:
             if not layer.visible:
                 continue
@@ -447,113 +442,49 @@ class Document(QObject):
         command.execute()
 
     def feather_selection(self, radius: int):
-        """Apply a feather (blur) to the selection edges."""
+        """Apply a feather (blur) to the selection edges using NumPy."""
         if not self.has_selection or radius <= 0:
             return
         
         old_mask = self.selection_mask.copy()
-        new_mask = self.selection_mask.copy()
         
-        width = new_mask.width()
-        height = new_mask.height()
-        
-        # Simple box blur on the selection mask
-        temp = QImage(width, height, QImage.Format.Format_Alpha8)
-        temp.fill(0)
-        
-        # Horizontal pass
-        for y in range(height):
-            for x in range(width):
-                total = 0
-                count = 0
-                for dx in range(-radius, radius + 1):
-                    nx = x + dx
-                    if 0 <= nx < width:
-                        # Get alpha value from selection mask
-                        c = old_mask.pixelColor(nx, y)
-                        total += c.alpha()
-                        count += 1
-                if count > 0:
-                    temp.setPixelColor(x, y, QColor(0, 0, 0, total // count))
-        
-        # Vertical pass
-        for y in range(height):
-            for x in range(width):
-                total = 0
-                count = 0
-                for dy in range(-radius, radius + 1):
-                    ny = y + dy
-                    if 0 <= ny < height:
-                        c = temp.pixelColor(x, ny)
-                        total += c.alpha()
-                        count += 1
-                if count > 0:
-                    new_mask.setPixelColor(x, y, QColor(0, 0, 0, total // count))
+        # Convert to numpy, blur, convert back
+        mask_arr = qimage_alpha8_to_numpy(self.selection_mask)
+        sigma = radius / 3.0
+        blurred = gaussian_blur_np(mask_arr, sigma)
+        new_mask = numpy_to_qimage_alpha8(blurred)
         
         command = SelectionCommand(self, old_mask, new_mask)
         self.history.push(command)
         command.execute()
 
     def expand_selection(self, amount: int):
-        """Expand the selection by given pixel amount."""
+        """Expand the selection by given pixel amount using morphological dilation."""
         if not self.has_selection or amount <= 0:
             return
         
         old_mask = self.selection_mask.copy()
-        new_mask = self.selection_mask.copy()
         
-        width = new_mask.width()
-        height = new_mask.height()
-        
-        # Dilation: if any neighbor is selected, this pixel becomes selected
-        for y in range(height):
-            for x in range(width):
-                max_alpha = old_mask.pixelColor(x, y).alpha()
-                
-                for dy in range(-amount, amount + 1):
-                    for dx in range(-amount, amount + 1):
-                        # Use circular distance
-                        if dx * dx + dy * dy <= amount * amount:
-                            nx, ny = x + dx, y + dy
-                            if 0 <= nx < width and 0 <= ny < height:
-                                alpha = old_mask.pixelColor(nx, ny).alpha()
-                                max_alpha = max(max_alpha, alpha)
-                
-                new_mask.setPixelColor(x, y, QColor(0, 0, 0, max_alpha))
+        # Convert to numpy, dilate, convert back
+        mask_arr = qimage_alpha8_to_numpy(self.selection_mask)
+        dilated = morphological_dilate(mask_arr, amount)
+        new_mask = numpy_to_qimage_alpha8(dilated)
         
         command = SelectionCommand(self, old_mask, new_mask)
         self.history.push(command)
         command.execute()
 
     def contract_selection(self, amount: int):
-        """Contract the selection by given pixel amount."""
+        """Contract the selection by given pixel amount using morphological erosion."""
         if not self.has_selection or amount <= 0:
             return
         
         old_mask = self.selection_mask.copy()
-        new_mask = self.selection_mask.copy()
         
-        width = new_mask.width()
-        height = new_mask.height()
-        
-        # Erosion: if any neighbor is unselected, this pixel becomes unselected
-        for y in range(height):
-            for x in range(width):
-                min_alpha = old_mask.pixelColor(x, y).alpha()
-                
-                for dy in range(-amount, amount + 1):
-                    for dx in range(-amount, amount + 1):
-                        # Use circular distance
-                        if dx * dx + dy * dy <= amount * amount:
-                            nx, ny = x + dx, y + dy
-                            if 0 <= nx < width and 0 <= ny < height:
-                                alpha = old_mask.pixelColor(nx, ny).alpha()
-                                min_alpha = min(min_alpha, alpha)
-                            else:
-                                # Edge pixels contract inward
-                                min_alpha = 0
-                
-                new_mask.setPixelColor(x, y, QColor(0, 0, 0, min_alpha))
+        # Convert to numpy, erode, convert back
+        mask_arr = qimage_alpha8_to_numpy(self.selection_mask)
+        eroded = morphological_erode(mask_arr, amount)
+        new_mask = numpy_to_qimage_alpha8(eroded)
         
         command = SelectionCommand(self, old_mask, new_mask)
         self.history.push(command)

@@ -1,5 +1,7 @@
 """
 Photo and artistic effects for Aphelion.
+
+Optimized with NumPy for high-performance image processing.
 """
 from PySide6.QtGui import QImage, QColor
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -8,6 +10,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush
 from ..core.effects import Effect
+from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage, apply_lut
+import numpy as np
 import math
 
 
@@ -179,37 +183,24 @@ class CurvesEffect(Effect):
         return CurvesDialog(parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
-        lut = config.get("lut", list(range(256)))
+        lut_list = config.get("lut", list(range(256)))
         channel = config.get("channel", "RGB")
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        lut = np.array(lut_list, dtype=np.uint8)
+        arr = qimage_to_numpy(image)
+        result = arr.copy()
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                
-                if channel == "RGB":
-                    r = lut[c.red()]
-                    g = lut[c.green()]
-                    b = lut[c.blue()]
-                elif channel == "Red":
-                    r = lut[c.red()]
-                    g = c.green()
-                    b = c.blue()
-                elif channel == "Green":
-                    r = c.red()
-                    g = lut[c.green()]
-                    b = c.blue()
-                else:  # Blue
-                    r = c.red()
-                    g = c.green()
-                    b = lut[c.blue()]
-                
-                result.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
+        # BGRA format: B=0, G=1, R=2
+        if channel == "RGB":
+            result = apply_lut(arr, lut, channels=(0, 1, 2))
+        elif channel == "Red":
+            result[:, :, 2] = lut[arr[:, :, 2]]
+        elif channel == "Green":
+            result[:, :, 1] = lut[arr[:, :, 1]]
+        else:  # Blue
+            result[:, :, 0] = lut[arr[:, :, 0]]
         
-        return result
+        return numpy_to_qimage(result)
 
 
 # ----------------- Levels Effect -----------------
@@ -286,30 +277,19 @@ class LevelsEffect(Effect):
         out_black = config.get("out_black", 0)
         out_white = config.get("out_white", 255)
         
-        # Build LUT
-        lut = []
+        # Build LUT using NumPy
         in_range = max(1, in_white - in_black)
         out_range = out_white - out_black
         
-        for i in range(256):
-            val = (i - in_black) / in_range
-            val = max(0, min(1, val))
-            val = out_black + val * out_range
-            lut.append(int(max(0, min(255, val))))
+        indices = np.arange(256, dtype=np.float32)
+        lut = (indices - in_black) / in_range
+        lut = np.clip(lut, 0, 1)
+        lut = out_black + lut * out_range
+        lut = np.clip(lut, 0, 255).astype(np.uint8)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
-        
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                r = lut[c.red()]
-                g = lut[c.green()]
-                b = lut[c.blue()]
-                result.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
-        
-        return result
+        arr = qimage_to_numpy(image)
+        result = apply_lut(arr, lut, channels=(0, 1, 2))
+        return numpy_to_qimage(result)
 
 
 # ----------------- Vignette Effect -----------------
@@ -364,34 +344,26 @@ class VignetteEffect(Effect):
         amount = config.get("amount", 50) / 100.0
         softness = config.get("softness", 50) / 100.0 + 0.5
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        cx = width / 2
-        cy = height / 2
-        max_dist = math.sqrt(cx*cx + cy*cy)
+        cx, cy = width / 2, height / 2
+        max_dist = np.sqrt(cx*cx + cy*cy)
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                
-                # Calculate distance from center
-                dx = x - cx
-                dy = y - cy
-                dist = math.sqrt(dx*dx + dy*dy) / max_dist
-                
-                # Apply vignette falloff
-                falloff = 1 - (dist ** softness) * amount
-                falloff = max(0, min(1, falloff))
-                
-                r = int(c.red() * falloff)
-                g = int(c.green() * falloff)
-                b = int(c.blue() * falloff)
-                
-                result.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
+        # Create distance grid
+        y_coords, x_coords = np.mgrid[0:height, 0:width].astype(np.float32)
+        dx = x_coords - cx
+        dy = y_coords - cy
+        dist = np.sqrt(dx*dx + dy*dy) / max_dist
         
-        return result
+        # Apply vignette falloff
+        falloff = 1 - (dist ** softness) * amount
+        falloff = np.clip(falloff, 0, 1)[:, :, np.newaxis]
+        
+        result = arr.astype(np.float32)
+        result[:, :, :3] = result[:, :, :3] * falloff
+        
+        return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
 
 
 # ----------------- Oil Painting Effect -----------------
@@ -445,32 +417,47 @@ class OilPaintingEffect(Effect):
         radius = config.get("radius", 3)
         intensity = config.get("intensity", 20)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        for y in range(radius, height - radius):
-            for x in range(radius, width - radius):
-                # Bin pixels by intensity
-                bins = [[] for _ in range(intensity)]
-                
-                for dy in range(-radius, radius + 1):
-                    for dx in range(-radius, radius + 1):
-                        c = image.pixelColor(x + dx, y + dy)
-                        gray = (c.red() + c.green() + c.blue()) // 3
-                        bin_idx = min(intensity - 1, gray * intensity // 256)
-                        bins[bin_idx].append((c.red(), c.green(), c.blue()))
-                
-                # Find most populated bin
-                max_bin = max(range(intensity), key=lambda i: len(bins[i]))
-                
-                if bins[max_bin]:
-                    avg_r = sum(c[0] for c in bins[max_bin]) // len(bins[max_bin])
-                    avg_g = sum(c[1] for c in bins[max_bin]) // len(bins[max_bin])
-                    avg_b = sum(c[2] for c in bins[max_bin]) // len(bins[max_bin])
-                    result.setPixelColor(x, y, QColor(avg_r, avg_g, avg_b, image.pixelColor(x, y).alpha()))
+        # Compute grayscale for quantization
+        gray = (arr[:, :, 0].astype(np.float32) + 
+                arr[:, :, 1].astype(np.float32) + 
+                arr[:, :, 2].astype(np.float32)) / 3.0
         
-        return result
+        # Quantize grayscale to intensity levels
+        quantized = np.floor(gray * intensity / 256.0).astype(np.int32)
+        quantized = np.clip(quantized, 0, intensity - 1)
+        
+        result = arr.copy()
+        
+        # For each intensity level, compute mean color within that level using box filter
+        from scipy.ndimage import uniform_filter
+        
+        kernel_size = 2 * radius + 1
+        
+        # Weight each channel by whether it belongs to each bin
+        for level in range(intensity):
+            mask = (quantized == level).astype(np.float32)
+            mask_sum = uniform_filter(mask, size=kernel_size, mode='reflect')
+            
+            # Only process if this level exists in the image
+            if mask.sum() == 0:
+                continue
+            
+            for c in range(3):
+                weighted = arr[:, :, c].astype(np.float32) * mask
+                weighted_sum = uniform_filter(weighted, size=kernel_size, mode='reflect')
+                
+                # Where this level is dominant, use the weighted average
+                valid = mask_sum > 0.01
+                level_mask = (quantized == level) & valid
+                if level_mask.any():
+                    result[:, :, c][level_mask] = np.clip(
+                        weighted_sum[level_mask] / mask_sum[level_mask], 0, 255
+                    ).astype(np.uint8)
+        
+        return numpy_to_qimage(result)
 
 
 # ----------------- Posterize Effect -----------------
@@ -511,27 +498,15 @@ class PosterizeEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         levels = config.get("levels", 4)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
-        
+        arr = qimage_to_numpy(image)
         step = 256 // levels
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                
-                r = (c.red() // step) * step + step // 2
-                g = (c.green() // step) * step + step // 2
-                b = (c.blue() // step) * step + step // 2
-                
-                r = min(255, r)
-                g = min(255, g)
-                b = min(255, b)
-                
-                result.setPixelColor(x, y, QColor(r, g, b, c.alpha()))
+        result = arr.copy()
+        for c in range(3):  # RGB channels only
+            result[:, :, c] = (arr[:, :, c] // step) * step + step // 2
+            result[:, :, c] = np.minimum(result[:, :, c], 255)
         
-        return result
+        return numpy_to_qimage(result)
 
 
 # ----------------- Black & White Effect -----------------
@@ -542,18 +517,19 @@ class BlackWhiteEffect(Effect):
     category = "Adjustments"
     
     def apply(self, image: QImage, config: dict) -> QImage:
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                # Weighted grayscale (luminosity)
-                gray = int(c.red() * 0.299 + c.green() * 0.587 + c.blue() * 0.114)
-                result.setPixelColor(x, y, QColor(gray, gray, gray, c.alpha()))
+        # Weighted grayscale (luminosity) - BGRA format
+        gray = (arr[:, :, 2].astype(np.float32) * 0.299 + 
+                arr[:, :, 1].astype(np.float32) * 0.587 + 
+                arr[:, :, 0].astype(np.float32) * 0.114).astype(np.uint8)
         
-        return result
+        result = arr.copy()
+        result[:, :, 0] = gray
+        result[:, :, 1] = gray
+        result[:, :, 2] = gray
+        
+        return numpy_to_qimage(result)
 
 
 # ----------------- Red Eye Removal Effect -----------------
@@ -607,35 +583,35 @@ class RedEyeRemovalEffect(Effect):
         tolerance = config.get("tolerance", 50) / 100.0
         sat_threshold = config.get("saturation", 70) / 100.0
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        result = arr.copy()
         
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                
-                r = c.red()
-                g = c.green()
-                b = c.blue()
-                
-                # Check if pixel is "red" (high red, low green/blue)
-                max_gb = max(g, b)
-                
-                if r > 50 and r > max_gb * (1 + tolerance):
-                    # Calculate saturation
-                    max_c = max(r, g, b)
-                    min_c = min(r, g, b)
-                    sat = (max_c - min_c) / max(max_c, 1)
-                    
-                    if sat > sat_threshold:
-                        # Desaturate the red - replace with average
-                        avg = (r + g + b) // 3
-                        # Make it darker (pupils are dark)
-                        new_val = min(avg, max_gb)
-                        result.setPixelColor(x, y, QColor(new_val, new_val, new_val, c.alpha()))
+        # BGRA format
+        b, g, r = arr[:, :, 0].astype(np.float32), arr[:, :, 1].astype(np.float32), arr[:, :, 2].astype(np.float32)
         
-        return result
+        # Check if pixel is "red" (high red, low green/blue)
+        max_gb = np.maximum(g, b)
+        
+        # Red detection mask
+        is_red = (r > 50) & (r > max_gb * (1 + tolerance))
+        
+        # Calculate saturation
+        max_c = np.maximum(r, np.maximum(g, b))
+        min_c = np.minimum(r, np.minimum(g, b))
+        sat = (max_c - min_c) / np.maximum(max_c, 1)
+        
+        # Combined mask
+        fix_mask = is_red & (sat > sat_threshold)
+        
+        # Desaturate red pixels
+        avg = ((r + g + b) / 3).astype(np.uint8)
+        new_val = np.minimum(avg, max_gb.astype(np.uint8))
+        
+        result[:, :, 0][fix_mask] = new_val[fix_mask]
+        result[:, :, 1][fix_mask] = new_val[fix_mask]
+        result[:, :, 2][fix_mask] = new_val[fix_mask]
+        
+        return numpy_to_qimage(result)
 
 
 # ----------------- Surface Blur Effect -----------------
@@ -689,36 +665,33 @@ class SurfaceBlurEffect(Effect):
         radius = config.get("radius", 3)
         threshold = config.get("threshold", 30)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        for y in range(radius, height - radius):
-            for x in range(radius, width - radius):
-                center = image.pixelColor(x, y)
-                center_lum = (center.red() + center.green() + center.blue()) // 3
-                
-                r_sum = g_sum = b_sum = 0
-                count = 0
-                
-                for dy in range(-radius, radius + 1):
-                    for dx in range(-radius, radius + 1):
-                        neighbor = image.pixelColor(x + dx, y + dy)
-                        neighbor_lum = (neighbor.red() + neighbor.green() + neighbor.blue()) // 3
-                        
-                        # Only include if within threshold
-                        if abs(neighbor_lum - center_lum) <= threshold:
-                            r_sum += neighbor.red()
-                            g_sum += neighbor.green()
-                            b_sum += neighbor.blue()
-                            count += 1
-                
-                if count > 0:
-                    result.setPixelColor(x, y, QColor(
-                        r_sum // count,
-                        g_sum // count,
-                        b_sum // count,
-                        center.alpha()
-                    ))
+        # Calculate luminance
+        center_lum = (arr[:, :, 0].astype(np.float32) + 
+                      arr[:, :, 1].astype(np.float32) + 
+                      arr[:, :, 2].astype(np.float32)) / 3
         
-        return result
+        result = np.zeros_like(arr, dtype=np.float32)
+        count = np.zeros((height, width), dtype=np.float32)
+        
+        for ky in range(-radius, radius + 1):
+            for kx in range(-radius, radius + 1):
+                shifted = np.roll(np.roll(arr, kx, axis=1), ky, axis=0)
+                shifted_lum = np.roll(np.roll(center_lum, kx, axis=1), ky, axis=0)
+                
+                # Edge-preserving: only include if similar luminance
+                diff = np.abs(shifted_lum - center_lum)
+                mask = diff <= threshold
+                
+                for c in range(4):
+                    result[:, :, c] += np.where(mask, shifted[:, :, c].astype(np.float32), 0)
+                count += mask.astype(np.float32)
+        
+        # Normalize
+        count = np.maximum(count, 1)
+        for c in range(4):
+            result[:, :, c] /= count
+        
+        return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))

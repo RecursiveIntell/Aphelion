@@ -1,14 +1,16 @@
 """
 Artistic effects for Aphelion.
-Pencil Sketch, Ink Sketch, Crystallize.
+Pencil Sketch, Ink Sketch, Crystallize - NumPy optimized.
 """
 from PySide6.QtGui import QImage, QColor
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QSlider, QDialogButtonBox, QSpinBox)
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
-import math
-import random
+from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage
+import numpy as np
+from scipy.ndimage import sobel
+from scipy.spatial import cKDTree
 
 
 # ----------------- Pencil Sketch Effect -----------------
@@ -41,7 +43,7 @@ class PencilSketchDialog(QDialog):
 
 
 class PencilSketchEffect(Effect):
-    """Pencil sketch artistic effect."""
+    """Pencil sketch artistic effect - NumPy optimized."""
     name = "Pencil Sketch"
     category = "Artistic"
     
@@ -51,33 +53,32 @@ class PencilSketchEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         detail = config.get("detail", 5)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
         
-        # Convert to grayscale first
-        gray = [[0] * width for _ in range(height)]
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                gray[y][x] = int(c.red() * 0.299 + c.green() * 0.587 + c.blue() * 0.114)
+        # Convert to grayscale (vectorized)
+        gray = (arr[:, :, 0].astype(np.float32) * 0.299 + 
+                arr[:, :, 1].astype(np.float32) * 0.587 + 
+                arr[:, :, 2].astype(np.float32) * 0.114)
         
-        # Apply edge detection (Sobel)
-        for y in range(1, height - 1):
-            for x in range(1, width - 1):
-                # Sobel kernels
-                gx = (gray[y-1][x+1] + 2*gray[y][x+1] + gray[y+1][x+1] -
-                      gray[y-1][x-1] - 2*gray[y][x-1] - gray[y+1][x-1])
-                gy = (gray[y+1][x-1] + 2*gray[y+1][x] + gray[y+1][x+1] -
-                      gray[y-1][x-1] - 2*gray[y-1][x] - gray[y-1][x+1])
-                
-                magnitude = min(255, int(math.sqrt(gx*gx + gy*gy) * detail / 5))
-                
-                # Invert for pencil effect (dark lines on white)
-                val = 255 - magnitude
-                result.setPixelColor(x, y, QColor(val, val, val, image.pixelColor(x, y).alpha()))
+        # Apply Sobel edge detection (vectorized)
+        gx = sobel(gray, axis=1)
+        gy = sobel(gray, axis=0)
+        magnitude = np.sqrt(gx**2 + gy**2)
         
-        return result
+        # Scale by detail and clamp
+        magnitude = np.clip(magnitude * detail / 5, 0, 255)
+        
+        # Invert for pencil effect (dark lines on white)
+        val = 255 - magnitude.astype(np.uint8)
+        
+        # Create result with grayscale values
+        result = arr.copy()
+        result[:, :, 0] = val
+        result[:, :, 1] = val
+        result[:, :, 2] = val
+        # Keep alpha
+        
+        return numpy_to_qimage(result)
 
 
 # ----------------- Ink Sketch Effect -----------------
@@ -110,7 +111,7 @@ class InkSketchDialog(QDialog):
 
 
 class InkSketchEffect(Effect):
-    """Ink sketch effect with high contrast edges."""
+    """Ink sketch effect with high contrast edges - NumPy optimized."""
     name = "Ink Sketch"
     category = "Artistic"
     
@@ -121,31 +122,28 @@ class InkSketchEffect(Effect):
         coverage = config.get("coverage", 50)
         threshold = 255 - int(coverage * 2.55)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
         
-        # Convert to grayscale
-        gray = [[0] * width for _ in range(height)]
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                gray[y][x] = int(c.red() * 0.299 + c.green() * 0.587 + c.blue() * 0.114)
+        # Convert to grayscale (vectorized)
+        gray = (arr[:, :, 0].astype(np.float32) * 0.299 + 
+                arr[:, :, 1].astype(np.float32) * 0.587 + 
+                arr[:, :, 2].astype(np.float32) * 0.114)
         
-        # Edge detection with thresholding
-        for y in range(1, height - 1):
-            for x in range(1, width - 1):
-                gx = abs(gray[y][x+1] - gray[y][x-1])
-                gy = abs(gray[y+1][x] - gray[y-1][x])
-                edge = gx + gy
-                
-                # High contrast black/white
-                if edge > threshold:
-                    result.setPixelColor(x, y, QColor(0, 0, 0, image.pixelColor(x, y).alpha()))
-                else:
-                    result.setPixelColor(x, y, QColor(255, 255, 255, image.pixelColor(x, y).alpha()))
+        # Simple gradient edge detection (vectorized)
+        gx = np.abs(np.diff(gray, axis=1, prepend=gray[:, :1]))
+        gy = np.abs(np.diff(gray, axis=0, prepend=gray[:1, :]))
+        edge = gx + gy
         
-        return result
+        # Threshold to black/white
+        black_mask = edge > threshold
+        
+        result = arr.copy()
+        result[:, :, 0] = np.where(black_mask, 0, 255)
+        result[:, :, 1] = np.where(black_mask, 0, 255)
+        result[:, :, 2] = np.where(black_mask, 0, 255)
+        # Keep alpha
+        
+        return numpy_to_qimage(result)
 
 
 # ----------------- Crystallize Effect -----------------
@@ -178,7 +176,7 @@ class CrystallizeDialog(QDialog):
 
 
 class CrystallizeEffect(Effect):
-    """Crystallize effect using Voronoi-like cells."""
+    """Crystallize effect using Voronoi-like cells - NumPy optimized."""
     name = "Crystallize"
     category = "Distort"
     
@@ -188,32 +186,35 @@ class CrystallizeEffect(Effect):
     def apply(self, image: QImage, config: dict) -> QImage:
         cell_size = config.get("cell_size", 10)
         
-        width = image.width()
-        height = image.height()
-        result = image.copy()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        # Generate random seed points
+        # Generate seed points on a grid with random offset
+        np.random.seed(42)  # Reproducible results
         seeds = []
+        seed_colors = []
+        
         for y in range(0, height, cell_size):
             for x in range(0, width, cell_size):
                 # Random offset within cell
-                sx = min(width - 1, x + random.randint(0, cell_size - 1))
-                sy = min(height - 1, y + random.randint(0, cell_size - 1))
-                color = image.pixelColor(sx, sy)
-                seeds.append((sx, sy, color))
+                sx = min(width - 1, x + np.random.randint(0, cell_size))
+                sy = min(height - 1, y + np.random.randint(0, cell_size))
+                seeds.append((sx, sy))
+                seed_colors.append(arr[sy, sx].copy())
         
-        # Assign each pixel to nearest seed
-        for y in range(height):
-            for x in range(width):
-                min_dist = float('inf')
-                best_color = image.pixelColor(x, y)
-                
-                for sx, sy, color in seeds:
-                    dist = (x - sx) ** 2 + (y - sy) ** 2
-                    if dist < min_dist:
-                        min_dist = dist
-                        best_color = color
-                
-                result.setPixelColor(x, y, best_color)
+        seeds = np.array(seeds)
+        seed_colors = np.array(seed_colors)
         
-        return result
+        # Create coordinate grid
+        yy, xx = np.mgrid[0:height, 0:width]
+        coords = np.stack([xx.ravel(), yy.ravel()], axis=1)
+        
+        # Use KD-tree for fast nearest neighbor lookup
+        tree = cKDTree(seeds)
+        _, indices = tree.query(coords)
+        
+        # Reshape indices and assign colors
+        indices = indices.reshape(height, width)
+        result = seed_colors[indices]
+        
+        return numpy_to_qimage(result)

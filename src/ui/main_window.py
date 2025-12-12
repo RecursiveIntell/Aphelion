@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QScrollArea, 
                                QFileDialog, QMessageBox, QStatusBar, QLabel, QWidget, QVBoxLayout, QSlider)
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QPalette
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QPalette, QShortcut
 from PySide6.QtCore import Qt
 
 from ..core.document import Document
@@ -52,6 +52,8 @@ class MainWindow(QMainWindow):
         self.session.zoom_action_triggered.connect(self.on_zoom_action)
         self._connected_canvas = None
         
+        # Install global event filter for keyboard shortcuts
+        QApplication.instance().installEventFilter(self)
         # Central Widget: Tab Widget
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
@@ -139,10 +141,58 @@ class MainWindow(QMainWindow):
         
         # ThreadPool
         self.threadpool = QThreadPool()
+        
+        # Global keyboard shortcuts (application-wide)
+        self._setup_global_shortcuts()
 
     def setup_effects_menu(self):
-        # We'll add to the existing menu bar if possible, or just call this from setup_menus
+        """Populate the Effects menu with all registered effect categories."""
+        menu = self.menuBar()
+        
+        # Create Effects menu after Adjustments
+        effects_menu = menu.addMenu("&Effects")
+        
+        # Get all categories from registry
+        all_effects = EffectRegistry.get_all()
+        
+        # Add each category as a submenu (skip "Adjustments" which has its own menu)
+        for category, effect_list in all_effects.items():
+            if category == "Adjustments":
+                continue  # Already in Adjustments menu
+            
+            if not effect_list:
+                continue
+                
+            submenu = effects_menu.addMenu(category)
+            for effect_cls in effect_list:
+                submenu.addAction(effect_cls.name, partial(self.run_effect, effect_cls))
+    
+    def _setup_global_shortcuts(self):
+        """Setup application-wide keyboard shortcuts."""
+        # Shortcuts handled via eventFilter instead of QShortcut
+        # to avoid conflicts and ensure proper event propagation
         pass
+    
+    def _swap_colors_debug(self):
+        """Debug wrapper for swap colors."""
+        print("DEBUG: X shortcut activated - swapping colors!")
+        self.session.swap_colors()
+
+    def eventFilter(self, obj, event):
+        """Global event filter for keyboard shortcuts."""
+        from PySide6.QtCore import QEvent
+        
+        if event.type() == QEvent.Type.KeyPress:
+            # X key - swap colors (Paint.NET style)
+            if event.key() == Qt.Key.Key_X and not event.modifiers():
+                # Don't trigger if we're in a text input
+                from PySide6.QtWidgets import QLineEdit, QTextEdit, QPlainTextEdit
+                focused = QApplication.focusWidget()
+                if not isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit)):
+                    self.session.swap_colors()
+                    return True  # Event handled
+        
+        return super().eventFilter(obj, event)
 
     def setup_menus(self):
         menu = self.menuBar()
@@ -174,6 +224,8 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Cu&t", self.cut, QKeySequence.Cut)
         edit_menu.addAction("&Copy", self.copy, QKeySequence.Copy)
         edit_menu.addAction("&Paste", self.paste, QKeySequence.Paste)
+        edit_menu.addSeparator()
+        edit_menu.addAction("Swap &Colors (X)", self.session.swap_colors)
         
         # Select
         select_menu = menu.addMenu("&Select")
@@ -407,6 +459,23 @@ class MainWindow(QMainWindow):
         # Let's say slider is percent.
         self.slider_zoom.setValue(int(value * 100))
         self.slider_zoom.blockSignals(False)
+        
+        # Update title bar with document name and zoom
+        self.update_window_title()
+    
+    def update_window_title(self):
+        """Update window title to show current document and zoom (Paint.NET style)."""
+        doc = self.active_document()
+        canvas = self.active_canvas()
+        
+        if doc and canvas:
+            # Get document name from tab
+            idx = self.tab_widget.currentIndex()
+            name = self.tab_widget.tabText(idx) if idx >= 0 else "Untitled"
+            zoom_pct = int(canvas.scale * 100)
+            self.setWindowTitle(f"{name} @ {zoom_pct}% - Aphelion")
+        else:
+            self.setWindowTitle("Aphelion - Professional Paint for Linux")
 
     def on_zoom_slider(self, value):
         # value is percent
@@ -482,62 +551,6 @@ class MainWindow(QMainWindow):
         
         doc.content_changed.emit()
 
-    def run_effect(self, effect_cls):
-        doc = self.active_document()
-        if not doc: return
-        
-        active_layer = doc.get_active_layer()
-        if not active_layer: return
-        
-        # 1. Config Dialog
-        effect = effect_cls()
-        dlg = effect.create_dialog(self)
-        if dlg:
-            if dlg.exec():
-                config = dlg.get_config()
-            else:
-                return # Cancelled
-        else:
-            config = {}
-            
-        # 2. Prepare Async Execution
-        # We need to capture the image data securely
-        src_image = active_layer.image.copy()
-        
-        # UI Feedback
-        progress = QProgressDialog(f"Applying {effect.name}...", "Cancel", 0, 0, self)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
-        
-        def worker_fn():
-            # Heavy lifting
-            return effect.apply(src_image, config)
-            
-        def on_result(result_image):
-            progress.close()
-            if result_image:
-                 # Apply to layer in main thread
-                 cmd = CanvasCommand(active_layer)
-                 # Manually set the "after" logic since we already have the new image
-                 active_layer.image = result_image
-                 cmd.capture_after()
-                 
-                 # Restore original for Undo to work (CanvasCommand captured BEFORE on init)
-                 # Wait, CanvasCommand captures BEFORE in init.
-                 # So we are good.
-                 doc.history.push(cmd)
-                 doc.content_changed.emit()
-
-        def on_error(err):
-            progress.close()
-            QMessageBox.critical(self, "Error", f"Effect failed: {err[1]}")
-            
-        worker = Worker(worker_fn)
-        worker.signals.result.connect(on_result)
-        worker.signals.error.connect(on_error)
-        
-        self.threadpool.start(worker)
-
     def add_adjustment_layer(self, effect_cls):
         doc = self.active_document()
         if not doc: return
@@ -611,7 +624,7 @@ class MainWindow(QMainWindow):
         scroll.setBackgroundRole(QPalette.ColorRole.Dark)
         scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        canvas = CanvasWidget(document)
+        canvas = CanvasWidget(document, session=self.session)
         scroll.setWidget(canvas)
         canvas.setFixedSize(document.size)
         
@@ -633,6 +646,10 @@ class MainWindow(QMainWindow):
         
         self.tab_widget.addTab(container, title)
         self.tab_widget.setCurrentWidget(container)
+        
+        # Explicitly set tools' document reference immediately
+        self.tools_dock_widget.set_active_document(document)
+        canvas.set_tool(self.session.active_tool)
         
         # Update Strip
         self.update_image_strip()
@@ -983,35 +1000,46 @@ class MainWindow(QMainWindow):
                 config = dlg.get_config()
             else:
                 return # Cancelled
-                
-        # Execute
-        # 1. Macro Command
-        macro = MacroCommand(f"Effect: {effect.name}")
         
-        # 2. Canvas Command (Capture Before)
-        cmd = CanvasCommand(layer)
-        macro.add_command(cmd)
+        # Show progress dialog
+        progress = QProgressDialog(f"Applying {effect.name}...", "Please wait", 0, 0, self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setCancelButton(None)  # Can't cancel mid-operation
+        progress.show()
+        QApplication.processEvents()
         
-        # 3. Apply Effect (This modifies layer image in place effectively if we assign back)
-        # Wait, Effect.apply returns NEW QImage.
-        # So we need to set layer.image = new_image.
-        # But we need to do this "LIVE" so user sees it?
-        # Standard: Dialog Preview? (MVP: No preview).
-        # So just apply on OK.
-        
-        # We need to manually do the application to capture "After".
-        # But wait, effectively we are doing the "Execute" phase here.
-        
-        new_img = effect.apply(layer.image, config)
-        layer.image = new_img
-        
-        # 4. Capture After
-        cmd.capture_after()
-        
-        # 5. Push Macro
-        # Since we already modified the document, we don't call execute().
-        doc.history.push(macro)
-        doc.content_changed.emit() # Redraw
+        # Execute synchronously but with UI update
+        try:
+            # Copy image for processing (safer for memory)
+            src_image = layer.image.copy()
+            
+            # Apply effect
+            new_img = effect.apply(src_image, config)
+            
+            if new_img and not new_img.isNull():
+                # Create undo command
+                cmd = CanvasCommand(layer)
+                layer.image = new_img
+                cmd.capture_after()
+                doc.history.push(cmd)
+                doc.content_changed.emit()
+            else:
+                QMessageBox.warning(self, "Effect Error", f"Effect {effect.name} returned invalid image")
+        except Exception as e:
+            QMessageBox.critical(self, "Effect Error", f"Effect failed: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            progress.close()
+
+    def keyPressEvent(self, event):
+        """Handle global keyboard shortcuts."""
+        if event.key() == Qt.Key.Key_X and not event.modifiers():
+            print("DEBUG: X pressed via keyPressEvent!")
+            self.session.swap_colors()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def closeEvent(self, event):
         # Save Settings

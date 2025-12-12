@@ -1,8 +1,13 @@
-"""Stylize effects module - Drop Shadow, Channel Shift, etc."""
+"""Stylize effects module - Drop Shadow, Channel Shift, etc.
+
+Optimized with NumPy for high-performance image processing.
+"""
 from PySide6.QtGui import QImage, QColor, QPainter
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QSpinBox, QCheckBox
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage, gaussian_blur_np, box_blur_np
+import numpy as np
 import math
 
 
@@ -83,90 +88,50 @@ class DropShadowEffect(Effect):
         blur = config.get("blur", 10)
         opacity = config.get("opacity", 60) / 100.0
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        # Create shadow layer from alpha
-        shadow = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        shadow.fill(QColor(0, 0, 0, 0))
+        # Create shadow from alpha channel
+        shadow = np.zeros_like(arr)
         
-        # Copy alpha as black shadow
-        for y in range(height):
-            for x in range(width):
-                c = image.pixelColor(x, y)
-                if c.alpha() > 0:
-                    # Shadow pixel at offset position
-                    sx = x + offset_x
-                    sy = y + offset_y
-                    if 0 <= sx < width and 0 <= sy < height:
-                        shadow_alpha = int(c.alpha() * opacity)
-                        shadow.setPixelColor(sx, sy, QColor(0, 0, 0, shadow_alpha))
+        # Shift alpha to create shadow at offset position
+        alpha = arr[:, :, 3].astype(np.float32) * opacity
         
-        # Simple box blur for shadow
+        # Create shifted shadow
+        shadow_alpha = np.zeros((height, width), dtype=np.float32)
+        
+        # Calculate valid source and destination ranges
+        src_y_start = max(0, -offset_y)
+        src_y_end = min(height, height - offset_y)
+        src_x_start = max(0, -offset_x)
+        src_x_end = min(width, width - offset_x)
+        
+        dst_y_start = max(0, offset_y)
+        dst_y_end = min(height, height + offset_y)
+        dst_x_start = max(0, offset_x)
+        dst_x_end = min(width, width + offset_x)
+        
+        # Copy shifted alpha
+        if dst_y_end > dst_y_start and dst_x_end > dst_x_start:
+            shadow_alpha[dst_y_start:dst_y_end, dst_x_start:dst_x_end] = \
+                alpha[src_y_start:src_y_end, src_x_start:src_x_end]
+        
+        # Blur shadow alpha if needed
         if blur > 0:
-            shadow = self._box_blur(shadow, blur)
+            shadow_alpha = gaussian_blur_np(shadow_alpha.astype(np.uint8), blur / 3.0).astype(np.float32)
+        
+        # Create shadow layer (black with alpha)
+        shadow[:, :, 3] = shadow_alpha.astype(np.uint8)
         
         # Composite: shadow first, then original on top
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        result.fill(QColor(0, 0, 0, 0))
+        # Alpha blending: result = fg * fg_alpha + bg * (1 - fg_alpha)
+        fg_alpha = arr[:, :, 3:4].astype(np.float32) / 255.0
+        bg_alpha = shadow[:, :, 3:4].astype(np.float32) / 255.0
         
-        painter = QPainter(result)
-        painter.drawImage(0, 0, shadow)
-        painter.drawImage(0, 0, image)
-        painter.end()
+        result = arr.astype(np.float32) * fg_alpha + shadow.astype(np.float32) * (1 - fg_alpha)
+        result[:, :, 3] = np.maximum(arr[:, :, 3], shadow[:, :, 3])
         
-        return result
-    
-    def _box_blur(self, img: QImage, radius: int) -> QImage:
-        """Simple box blur implementation."""
-        width = img.width()
-        height = img.height()
-        result = img.copy()
-        
-        # Horizontal pass
-        temp = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        temp.fill(QColor(0, 0, 0, 0))
-        
-        for y in range(height):
-            for x in range(width):
-                r_sum, g_sum, b_sum, a_sum = 0, 0, 0, 0
-                count = 0
-                for dx in range(-radius, radius + 1):
-                    nx = x + dx
-                    if 0 <= nx < width:
-                        c = img.pixelColor(nx, y)
-                        r_sum += c.red()
-                        g_sum += c.green()
-                        b_sum += c.blue()
-                        a_sum += c.alpha()
-                        count += 1
-                if count > 0:
-                    temp.setPixelColor(x, y, QColor(
-                        r_sum // count, g_sum // count, 
-                        b_sum // count, a_sum // count
-                    ))
-        
-        # Vertical pass
-        for y in range(height):
-            for x in range(width):
-                r_sum, g_sum, b_sum, a_sum = 0, 0, 0, 0
-                count = 0
-                for dy in range(-radius, radius + 1):
-                    ny = y + dy
-                    if 0 <= ny < height:
-                        c = temp.pixelColor(x, ny)
-                        r_sum += c.red()
-                        g_sum += c.green()
-                        b_sum += c.blue()
-                        a_sum += c.alpha()
-                        count += 1
-                if count > 0:
-                    result.setPixelColor(x, y, QColor(
-                        r_sum // count, g_sum // count,
-                        b_sum // count, a_sum // count
-                    ))
-        
-        return result
+        return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
 
 
 class ChannelShiftDialog(QDialog):
@@ -240,38 +205,19 @@ class ChannelShiftEffect(Effect):
         blue_x = config.get("blue_x", 5)
         blue_y = config.get("blue_y", 0)
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        result.fill(QColor(0, 0, 0, 0))
+        result = arr.copy()
         
-        for y in range(height):
-            for x in range(width):
-                # Get green from original position
-                g_c = image.pixelColor(x, y)
-                g = g_c.green()
-                a = g_c.alpha()
-                
-                # Get red from shifted position
-                rx = x - red_x
-                ry = y - red_y
-                if 0 <= rx < width and 0 <= ry < height:
-                    r = image.pixelColor(rx, ry).red()
-                else:
-                    r = 0
-                
-                # Get blue from shifted position
-                bx = x - blue_x
-                by = y - blue_y
-                if 0 <= bx < width and 0 <= by < height:
-                    b = image.pixelColor(bx, by).blue()
-                else:
-                    b = 0
-                
-                result.setPixelColor(x, y, QColor(r, g, b, a))
+        # BGRA format: B=0, G=1, R=2, A=3
+        # Shift Red channel (index 2)
+        result[:, :, 2] = np.roll(np.roll(arr[:, :, 2], red_x, axis=1), red_y, axis=0)
         
-        return result
+        # Shift Blue channel (index 0)
+        result[:, :, 0] = np.roll(np.roll(arr[:, :, 0], blue_x, axis=1), blue_y, axis=0)
+        
+        return numpy_to_qimage(result)
 
 
 class BokehBlurDialog(QDialog):
@@ -329,52 +275,43 @@ class BokehBlurEffect(Effect):
         radius = config.get("radius", 8)
         brightness = config.get("brightness", 20) / 100.0
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        
-        # Create circular kernel
-        kernel_size = radius * 2 + 1
-        kernel = []
+        # Create circular kernel points
+        kernel_points = []
         for ky in range(-radius, radius + 1):
             for kx in range(-radius, radius + 1):
-                dist = math.sqrt(kx * kx + ky * ky)
-                if dist <= radius:
-                    kernel.append((kx, ky))
+                if kx * kx + ky * ky <= radius * radius:
+                    kernel_points.append((ky, kx))
         
-        kernel_count = len(kernel)
+        kernel_count = len(kernel_points)
         if kernel_count == 0:
             return image.copy()
         
-        for y in range(height):
-            for x in range(width):
-                r_sum, g_sum, b_sum, a_sum = 0.0, 0.0, 0.0, 0.0
-                max_lum = 0
-                
-                for kx, ky in kernel:
-                    nx, ny = x + kx, y + ky
-                    if 0 <= nx < width and 0 <= ny < height:
-                        c = image.pixelColor(nx, ny)
-                        # Weight brighter pixels more (bokeh effect)
-                        lum = (c.red() + c.green() + c.blue()) / 3
-                        weight = 1.0 + (lum / 255.0) * brightness
-                        r_sum += c.red() * weight
-                        g_sum += c.green() * weight
-                        b_sum += c.blue() * weight
-                        a_sum += c.alpha()
-                        max_lum = max(max_lum, lum)
-                
-                # Normalize
-                total_weight = kernel_count * (1.0 + (max_lum / 255.0) * brightness * 0.5)
-                r = int(min(255, r_sum / total_weight))
-                g = int(min(255, g_sum / total_weight))
-                b = int(min(255, b_sum / total_weight))
-                a = int(a_sum / kernel_count)
-                
-                result.setPixelColor(x, y, QColor(r, g, b, a))
+        result = np.zeros((height, width, 4), dtype=np.float32)
+        weight_sum = np.zeros((height, width), dtype=np.float32)
         
-        return result
+        # Calculate luminance for weighting
+        lum = (arr[:, :, 0].astype(np.float32) + 
+               arr[:, :, 1].astype(np.float32) + 
+               arr[:, :, 2].astype(np.float32)) / 3
+        
+        for ky, kx in kernel_points:
+            shifted = np.roll(np.roll(arr, kx, axis=1), ky, axis=0)
+            shifted_lum = np.roll(np.roll(lum, kx, axis=1), ky, axis=0)
+            
+            weight = 1.0 + (shifted_lum / 255.0) * brightness
+            
+            for c in range(4):
+                result[:, :, c] += shifted[:, :, c].astype(np.float32) * weight
+            weight_sum += weight
+        
+        # Normalize
+        for c in range(4):
+            result[:, :, c] /= np.maximum(weight_sum, 1)
+        
+        return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
 
 
 class SketchBlurDialog(QDialog):
@@ -432,40 +369,102 @@ class SketchBlurEffect(Effect):
         radius = config.get("radius", 3)
         threshold = config.get("threshold", 30)
         
-        width = image.width()
-        height = image.height()
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
         
-        result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        # Calculate luminance
+        center_lum = (arr[:, :, 0].astype(np.float32) + 
+                      arr[:, :, 1].astype(np.float32) + 
+                      arr[:, :, 2].astype(np.float32)) / 3
         
-        for y in range(height):
-            for x in range(width):
-                center = image.pixelColor(x, y)
-                center_lum = (center.red() + center.green() + center.blue()) / 3
-                
-                r_sum, g_sum, b_sum, a_sum = 0, 0, 0, 0
-                count = 0
-                
-                for ky in range(-radius, radius + 1):
-                    for kx in range(-radius, radius + 1):
-                        nx, ny = x + kx, y + ky
-                        if 0 <= nx < width and 0 <= ny < height:
-                            c = image.pixelColor(nx, ny)
-                            c_lum = (c.red() + c.green() + c.blue()) / 3
-                            
-                            # Only include if similar luminance (edge-preserving)
-                            if abs(c_lum - center_lum) < threshold:
-                                r_sum += c.red()
-                                g_sum += c.green()
-                                b_sum += c.blue()
-                                a_sum += c.alpha()
-                                count += 1
-                
-                if count > 0:
-                    result.setPixelColor(x, y, QColor(
-                        r_sum // count, g_sum // count,
-                        b_sum // count, a_sum // count
-                    ))
-                else:
-                    result.setPixelColor(x, y, center)
+        result = np.zeros_like(arr, dtype=np.float32)
+        count = np.zeros((height, width), dtype=np.float32)
         
-        return result
+        for ky in range(-radius, radius + 1):
+            for kx in range(-radius, radius + 1):
+                shifted = np.roll(np.roll(arr, kx, axis=1), ky, axis=0)
+                shifted_lum = np.roll(np.roll(center_lum, kx, axis=1), ky, axis=0)
+                
+                # Edge-preserving: only include if similar luminance
+                diff = np.abs(shifted_lum - center_lum)
+                mask = diff < threshold
+                
+                for c in range(4):
+                    result[:, :, c] += np.where(mask, shifted[:, :, c].astype(np.float32), 0)
+                count += mask.astype(np.float32)
+        
+        # Normalize
+        count = np.maximum(count, 1)
+        for c in range(4):
+            result[:, :, c] /= count
+        
+        return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
+
+
+class ReliefDialog(QDialog):
+    """Dialog for Relief effect."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Relief")
+        layout = QVBoxLayout()
+        
+        # Angle
+        a_layout = QHBoxLayout()
+        a_layout.addWidget(QLabel("Angle:"))
+        self.a_slider = QSlider(Qt.Orientation.Horizontal)
+        self.a_slider.setRange(0, 360)
+        self.a_slider.setValue(315)  # Top-left light
+        a_layout.addWidget(self.a_slider)
+        self.a_val = QLabel("315°")
+        self.a_slider.valueChanged.connect(lambda v: self.a_val.setText(f"{v}°"))
+        a_layout.addWidget(self.a_val)
+        layout.addLayout(a_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        self.setLayout(layout)
+    
+    def get_config(self):
+        return {"angle": self.a_slider.value()}
+
+
+class ReliefEffect(Effect):
+    """Relief/emboss with configurable lighting angle."""
+    name = "Relief"
+    category = "Stylize"
+    
+    def create_dialog(self, parent) -> QDialog:
+        return ReliefDialog(parent)
+    
+    def apply(self, image: QImage, config: dict) -> QImage:
+        angle = config.get("angle", 315)
+        
+        arr = qimage_to_numpy(image)
+        height, width = arr.shape[:2]
+        
+        # Convert to grayscale
+        gray = (arr[:, :, 0].astype(np.float32) * 0.299 + 
+                arr[:, :, 1].astype(np.float32) * 0.587 + 
+                arr[:, :, 2].astype(np.float32) * 0.114)
+        
+        # Calculate offset based on angle
+        rad = math.radians(angle)
+        dx = int(round(math.cos(rad)))
+        dy = int(round(math.sin(rad)))
+        
+        # Shift and compute difference
+        shifted = np.roll(np.roll(gray, dx, axis=1), dy, axis=0)
+        
+        # Difference + 128 for neutral gray
+        relief = np.clip((gray - shifted) + 128, 0, 255).astype(np.uint8)
+        
+        # Output as grayscale with original alpha
+        result = arr.copy()
+        result[:, :, 0] = relief
+        result[:, :, 1] = relief
+        result[:, :, 2] = relief
+        
+        return numpy_to_qimage(result)
