@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QScrollArea, 
                                QFileDialog, QMessageBox, QStatusBar, QLabel, QWidget, QVBoxLayout, QSlider)
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QPalette, QShortcut
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QPalette, QShortcut, QImage
 from PySide6.QtCore import Qt
 
 from ..core.document import Document
