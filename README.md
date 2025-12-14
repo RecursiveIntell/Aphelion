@@ -52,7 +52,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-pip install PySide6 numpy scipy
+pip install PySide6 numpy scipy pycairo
 
 # Run
 ./run.sh
@@ -87,7 +87,21 @@ python verify_all.py
 - Python 3.10+
 - PySide6
 - NumPy, SciPy
+- PyCairo (Cairo-based rendering backend)
 - Linux (tested on Fedora/Nobara)
+
+### Installing PyCairo
+
+```bash
+# pip (usually works)
+pip install pycairo
+
+# Fedora/RHEL (if pip fails)
+sudo dnf install cairo-devel
+
+# Ubuntu/Debian (if pip fails)
+sudo apt install libcairo2-dev
+```
 
 ## 📄 License
 

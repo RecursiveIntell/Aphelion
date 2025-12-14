@@ -8,6 +8,7 @@ from ..utils.image_processing import (
     qimage_alpha8_to_numpy, numpy_to_qimage_alpha8,
     gaussian_blur_np, morphological_dilate, morphological_erode
 )
+from .renderer_cairo import CairoRenderer
 
 class Document(QObject):
     # Signals to notify UI
@@ -25,11 +26,17 @@ class Document(QObject):
         self.history = HistoryManager()
         self.file_path = None  # Path to saved project file
         
+        # Cairo-based renderer for layer compositing
+        self._renderer = CairoRenderer()
+        
         # Selection Mask (Alpha8: 0=Unselected, 255=Selected)
         self.selection_mask = QImage(width, height, QImage.Format.Format_Alpha8)
         self.selection_mask.fill(0) 
         self.has_selection = False
         self.selection_region = QRegion()
+        
+        # Connect content_changed to invalidate renderer cache
+        self.content_changed.connect(self._invalidate_render_cache)
 
     def resize_image(self, width: int, height: int):
         if self.size.width() == width and self.size.height() == height:
@@ -284,70 +291,26 @@ class Document(QObject):
          self.history.push(macro)
          self.content_changed.emit()
 
+    def _invalidate_render_cache(self):
+        """Invalidate the Cairo renderer cache when content changes."""
+        for layer in self.layers:
+            self._renderer.invalidate_layer(layer.id)
+    
+    def invalidate_layer_cache(self, layer_id: str):
+        """Invalidate cache for a specific layer."""
+        self._renderer.invalidate_layer(layer_id)
+
     def render(self, rect: QRect = None) -> QImage:
         """
-        Render the document composite.
+        Render the document composite using Cairo backend.
+        
+        Args:
+            rect: Optional clip rectangle (not yet implemented)
+            
+        Returns:
+            QImage with composited layers
         """
-        # Create output image
-        out_img = QImage(self.size, QImage.Format.Format_ARGB32_Premultiplied)
-        
-        # 0. Draw Background (Checkerboard) - optional? 
-        # Usually render() returns the CONTENT. The checkerboard is a UI view thing.
-        # But if we want opacity to be visible, we keep it transparent.
-        out_img.fill(0)
-        
-        painter_out = QPainter(out_img)
-        
-        # Optimization: Clip
-        if rect:
-             # This doesn't resize the image (keeping logic simple), but we could just draw within rect.
-             # painter.setClipRect(rect)
-             pass
-             
-        # Composition Loop
-        for layer in self.layers:
-            if not layer.visible:
-                continue
-                
-            if layer.is_adjustment:
-                # Apply effect to current out_img
-                # We need to end painter to process image
-                painter_out.end()
-                
-                # Apply effect (returns new image)
-                try:
-                    out_img = layer.render_effect(out_img)
-                except Exception as e:
-                    print(f"Error rendering adjustment layer {layer.name}: {e}")
-                
-                # Restart painter
-                painter_out = QPainter(out_img)
-                
-            else:
-                # Normal composite
-                # Support Mask
-                src_image = layer.image
-                
-                if layer.mask:
-                    # Apply mask: Alpha masking (White=Opaque, Black=Transp)
-                    # We need a temporary buffer to mask the layer before blending to main
-                    masked_img = QImage(layer.image.size(), QImage.Format.Format_ARGB32_Premultiplied)
-                    masked_img.fill(0)
-                    
-                    p = QPainter(masked_img)
-                    p.drawImage(0, 0, layer.image)
-                    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-                    p.drawImage(0, 0, layer.mask)
-                    p.end()
-                    
-                    src_image = masked_img
-                
-                painter_out.setOpacity(layer.opacity)
-                painter_out.setCompositionMode(layer.blend_mode)
-                painter_out.drawImage(0, 0, src_image)
-                
-        painter_out.end()
-        return out_img
+        return self._renderer.render_to_qimage(self)
 
     def combine_selection(self, new_mask: QImage, operation: str = "replace"):
         """
