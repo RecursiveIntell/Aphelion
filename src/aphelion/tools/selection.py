@@ -61,10 +61,20 @@ class EllipseSelectTool(Tool):
         final_mask = self.document.selection_mask.copy()
         
         painter = QPainter(final_mask)
+
         if operation == "replace":
             final_mask.fill(0)
             painter.drawImage(0, 0, new_partial_mask)
-        # TODO: Add/Subtract logic (Phase 3 task? Yes.)
+        elif operation == "add":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            painter.drawImage(0, 0, new_partial_mask)
+        elif operation == "subtract":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+            painter.drawImage(0, 0, new_partial_mask)
+        elif operation == "intersect":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+            painter.drawImage(0, 0, new_partial_mask)
+
         painter.end()
         
         return SelectionCommand(self.document, old_mask, final_mask)
@@ -123,10 +133,22 @@ class LassoSelectTool(Tool):
         from ..core.commands import SelectionCommand
         old_mask = self.document.selection_mask.copy()
         final_mask = self.document.selection_mask.copy()
+
         painter = QPainter(final_mask)
+
         if operation == "replace":
              final_mask.fill(0)
              painter.drawImage(0, 0, new_partial_mask)
+        elif operation == "add":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            painter.drawImage(0, 0, new_partial_mask)
+        elif operation == "subtract":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+            painter.drawImage(0, 0, new_partial_mask)
+        elif operation == "intersect":
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+            painter.drawImage(0, 0, new_partial_mask)
+
         painter.end()
         return SelectionCommand(self.document, old_mask, final_mask)
 
