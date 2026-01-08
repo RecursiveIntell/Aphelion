@@ -20,12 +20,17 @@ class CanvasWidget(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Enable keyboard input
         
         # Subscribe to document changes to trigger repaints
-        self.document.content_changed.connect(self.update)
-        self.document.content_changed.connect(self.update)
+        self.document.content_changed.connect(self._on_content_changed)
+        self.document.layer_added.connect(lambda _: self._on_content_changed())
+        self.document.layer_removed.connect(lambda _: self._on_content_changed())
         self.document.active_layer_changed.connect(lambda l: self.update())
         self.document.selection_changed.connect(self._on_selection_changed)
+        self.document.overlay_changed.connect(self.update)
         
         self.active_tool: Tool | None = None
+
+        # Render Cache
+        self._cached_rendered_image: QImage | None = None
 
         # Create checkerboard pattern
         self.checker_brush = self._create_checkerboard_brush()
@@ -35,6 +40,11 @@ class CanvasWidget(QWidget):
         # Transient layer for tools (e.g. brush preview)
         # Tools will write to this, and we composite it last.
         self.transient_layer = None 
+
+    def _on_content_changed(self):
+        """Invalidate render cache and update."""
+        self._cached_rendered_image = None
+        self.update()
 
     def _on_selection_changed(self):
         self.update() 
@@ -68,8 +78,10 @@ class CanvasWidget(QWidget):
         
         # 2. Render Document Content
         # We render the whole thing for now. Optimization: Render only visible tile.
-        rendered_img = self.document.render() # TODO: Pass visible rect
-        painter.drawImage(0, 0, rendered_img)
+        if self._cached_rendered_image is None:
+             self._cached_rendered_image = self.document.render() # TODO: Pass visible rect
+
+        painter.drawImage(0, 0, self._cached_rendered_image)
             
         # 3. Draw Selection Overlay
         if self.document.has_selection:
