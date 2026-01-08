@@ -39,6 +39,7 @@ class PluginManager:
         if cls._instance is None:
             cls._instance = super(PluginManager, cls).__new__(cls)
             cls._instance.plugins = []
+            cls._instance.discovered_plugins = []
             cls._instance.loaded_modules = {}
             cls._instance.context = {} # Stored context callbacks
             cls._instance.settings = SettingsManager()
@@ -89,6 +90,7 @@ class PluginManager:
                         attr is not AphelionPlugin):
                         
                         plugin_instance = attr()
+                        self.discovered_plugins.append(plugin_instance)
                         
                         if disabled_list and plugin_instance.name in disabled_list:
                             print(f"Skipping disabled plugin: {plugin_instance.name}")
@@ -117,6 +119,9 @@ class PluginManager:
 
     def get_loaded_plugins(self) -> List[AphelionPlugin]:
         return self.plugins
+
+    def get_all_plugins(self) -> List[AphelionPlugin]:
+        return self.discovered_plugins
     
     def set_plugin_enabled(self, plugin_name: str, enabled: bool):
         disabled = self.settings.get_value("plugins/disabled", [])

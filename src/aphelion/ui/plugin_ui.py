@@ -33,39 +33,17 @@ class PluginManagerDialog(QDialog):
         
     def refresh_list(self):
         manager = PluginManager()
-        plugins = manager.get_loaded_plugins()
+        
+        # Use new method to get all plugins (including disabled ones with metadata)
+        all_plugins = manager.get_all_plugins()
         disabled_list = manager.settings.get_value("plugins/disabled", [])
-        
-        # Merge loaded with what we know? 
-        # Ideally we list all found, even if disabled (which aren't in loaded_plugins list if filtered).
-        # We need discover to return details even for disabled ones?
-        # Current discover() skips them. 
-        # Modifying discover() to return all found metadata would be better, but for MVP:
-        # Load them anyway then filter at init? Or just show checked/unchecked.
-        # Actually, if they are disabled, they are NOT in get_loaded_plugins().
-        # So we can't show them to re-enable them easily without re-scanning without filter.
-        # Let's rely on Manager to give us "all known" or we scan differently.
-        
-        # Fix: Manager should store list of disabled ones separately or we scan again ignoring filter?
-        # Let's assume for now we only show loaded.
-        # To show disabled ones, we need to hack manager or scan manually here.
-        
-        # Improvement: Show disabled items from settings as rows (grayed out?)
         
         self.table.setRowCount(0)
         
-        # 1. Loaded Plugins
-        for i, plugin in enumerate(plugins):
-            self._add_row(plugin, True)
-            
-        # 2. Disabled Plugins (from settings names)
-        # We don't have metadata if not loaded. Just show Name.
-        for name in disabled_list:
-             # Check if already shown? (Shouldn't be if logic is correct)
-             # Create dummy plugin obj for display
-             from types import SimpleNamespace
-             dummy = SimpleNamespace(name=name, version="?", author="?", description="Disabled (Restart required)")
-             self._add_row(dummy, False)
+        # Populate table with all discovered plugins
+        for plugin in all_plugins:
+            is_enabled = plugin.name not in disabled_list
+            self._add_row(plugin, is_enabled)
 
     def _add_row(self, plugin, enabled):
         row = self.table.rowCount()
