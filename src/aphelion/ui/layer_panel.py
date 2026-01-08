@@ -61,8 +61,12 @@ class LayerPanel(QWidget):
         self.slider_opacity.setRange(0, 255)
         self.slider_opacity.setValue(255)
         self.slider_opacity.valueChanged.connect(self.on_opacity_changed)
+        self.slider_opacity.sliderPressed.connect(self.on_opacity_slider_pressed)
+        self.slider_opacity.sliderReleased.connect(self.on_opacity_slider_released)
         op_layout.addWidget(self.slider_opacity)
         self.layout.addLayout(op_layout)
+
+        self._opacity_start_value = 1.0
         
         # Tools (Add/Remove/Dup/Merge)
         self.button_layout = QHBoxLayout()
@@ -113,6 +117,7 @@ class LayerPanel(QWidget):
             # Subscribe
             self.document.layer_added.connect(self.refresh)
             self.document.layer_removed.connect(lambda l: self.refresh())
+            self.document.content_changed.connect(self.update_controls)
             self.refresh()
             
     def set_document(self, document: Document):
@@ -121,6 +126,7 @@ class LayerPanel(QWidget):
          if self.document:
              self.document.layer_added.connect(self.refresh)
              self.document.layer_removed.connect(lambda l: self.refresh())
+             self.document.content_changed.connect(self.update_controls)
              self.refresh()
 
     def refresh(self):
@@ -224,12 +230,33 @@ class LayerPanel(QWidget):
             layer.blend_mode = mode
             self.document.content_changed.emit()
 
+    def on_opacity_slider_pressed(self):
+        layer = self.document.get_active_layer()
+        if layer:
+            self._opacity_start_value = layer.opacity
+
+    def on_opacity_slider_released(self):
+        layer = self.document.get_active_layer()
+        if not layer: return
+
+        new_value = layer.opacity
+        if abs(new_value - self._opacity_start_value) > 0.001:
+            cmd = LayerPropertyCommand(
+                layer,
+                "opacity",
+                self._opacity_start_value,
+                new_value,
+                signal_callback=lambda: self.document.content_changed.emit()
+            )
+            self.document.history.push(cmd)
+
     def on_opacity_changed(self, value):
         layer = self.document.get_active_layer()
         if not layer: return
-        if layer.opacity != value:
-            # TODO: Command
-            layer.opacity = value
+
+        opacity = value / 255.0
+        if abs(layer.opacity - opacity) > 0.001:
+            layer.opacity = opacity
             self.document.content_changed.emit()
 
     def update_controls(self):
@@ -247,7 +274,7 @@ class LayerPanel(QWidget):
         self.combo_mode.blockSignals(True)
         self.chk_edit_mask.blockSignals(True)
         
-        self.slider_opacity.setValue(layer.opacity)
+        self.slider_opacity.setValue(int(layer.opacity * 255))
         mode_name = MODE_NAMES.get(layer.blend_mode, "Normal")
         self.combo_mode.setCurrentText(mode_name)
         
