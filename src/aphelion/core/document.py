@@ -2,7 +2,7 @@ from PySide6.QtCore import QObject, Signal, QSize, QRect, Qt, QPoint
 from PySide6.QtGui import QImage, QColor, QPainter, QRegion, QBitmap
 from .layer import Layer
 from .history import HistoryManager
-from .commands import DocumentPropertyCommand, SelectionCommand, LayerStructureCommand, MacroCommand, CanvasCommand
+from .commands import DocumentPropertyCommand, SelectionCommand, LayerStructureCommand, MacroCommand, CanvasCommand, LayerPropertyCommand
 from PySide6.QtGui import QTransform
 from ..utils.image_processing import (
     qimage_alpha8_to_numpy, numpy_to_qimage_alpha8,
@@ -51,31 +51,28 @@ class Document(QObject):
                                           signal_callback=lambda: self.content_changed.emit())
         macro.add_command(prop_cmd)
 
-        # 2. Layers
-        canvas_cmds = []
+        # 2. Layers (Using LayerPropertyCommand for image replacement)
         for layer in self.layers:
-            cmd = CanvasCommand(layer)
+            old_image = layer.image
+            new_image = layer.image.scaled(new_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+            # Capture for undo/redo
+            # Note: old_image is reference to current object. new_image is new object.
+            cmd = LayerPropertyCommand(layer, "image", old_image, new_image, signal_callback=lambda l=layer: self.invalidate_layer_cache(l.id))
             macro.add_command(cmd)
-            canvas_cmds.append(cmd)
+            # Execute now to update state for subsequent logic if any
+            cmd.execute()
             
         # 3. Selection
-        sel_cmd = SelectionCommand(self, self.selection_mask.copy(), self.selection_mask.copy())
+        new_mask = self.selection_mask.scaled(new_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.FastTransformation)
+        sel_cmd = SelectionCommand(self, self.selection_mask, new_mask)
         macro.add_command(sel_cmd)
         
         # Execute Property
         prop_cmd.execute()
         
-        # Execute Logic
-        for layer in self.layers:
-            layer.image = layer.image.scaled(new_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        
-        self.selection_mask = self.selection_mask.scaled(new_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.FastTransformation)
-        self._update_selection_region()
-        
-        # Capture After
-        for cmd in canvas_cmds:
-            cmd.capture_after()
-        sel_cmd.new_mask = self.selection_mask.copy()
+        # Execute Selection Change
+        sel_cmd.execute()
         
         self.history.push(macro)
         self.content_changed.emit()
@@ -92,20 +89,8 @@ class Document(QObject):
                                           signal_callback=lambda: self.content_changed.emit())
         macro.add_command(prop_cmd)
         
-        canvas_cmds = []
-        for layer in self.layers:
-            cmd = CanvasCommand(layer)
-            macro.add_command(cmd)
-            canvas_cmds.append(cmd)
-            
-        sel_cmd = SelectionCommand(self, self.selection_mask.copy(), self.selection_mask.copy())
-        macro.add_command(sel_cmd)
-        
         old_size_w = self.size.width()
         old_size_h = self.size.height()
-        
-        # Do it
-        prop_cmd.execute()
         
         # Calculate offset
         dx, dy = 0, 0
@@ -139,7 +124,7 @@ class Document(QObject):
         else: # Default center
             dx = (width - old_size_w) // 2
             dy = (height - old_size_h) // 2
-        
+
         # Resize Layers (Crop/Expand)
         for layer in self.layers:
             new_img = QImage(new_size, QImage.Format.Format_ARGB32_Premultiplied)
@@ -147,7 +132,11 @@ class Document(QObject):
             painter = QPainter(new_img)
             painter.drawImage(dx, dy, layer.image)
             painter.end()
-            layer.image = new_img
+
+            # Use LayerPropertyCommand
+            cmd = LayerPropertyCommand(layer, "image", layer.image, new_img, signal_callback=lambda l=layer: self.invalidate_layer_cache(l.id))
+            macro.add_command(cmd)
+            cmd.execute()
             
         # Resize Mask
         new_mask = QImage(new_size, QImage.Format.Format_Alpha8)
@@ -155,12 +144,13 @@ class Document(QObject):
         painter = QPainter(new_mask)
         painter.drawImage(dx, dy, self.selection_mask)
         painter.end()
-        self.selection_mask = new_mask
-        self._update_selection_region()
         
-        for cmd in canvas_cmds:
-            cmd.capture_after()
-        sel_cmd.new_mask = self.selection_mask.copy()
+        sel_cmd = SelectionCommand(self, self.selection_mask, new_mask)
+        macro.add_command(sel_cmd)
+        sel_cmd.execute()
+
+        # Do it
+        prop_cmd.execute()
         
         self.history.push(macro)
         self.content_changed.emit()
@@ -169,15 +159,6 @@ class Document(QObject):
     def rotate_image(self, angle: float):
         macro = MacroCommand(f"Rotate {angle}")
         
-        canvas_cmds = []
-        for layer in self.layers:
-             cmd = CanvasCommand(layer)
-             macro.add_command(cmd)
-             canvas_cmds.append(cmd)
-             
-        sel_cmd = SelectionCommand(self, self.selection_mask.copy(), self.selection_mask.copy())
-        macro.add_command(sel_cmd)
-
         # Handle Size Change (90/270)
         if angle in [90, -90, 270, -270]:
              new_size = QSize(self.size.height(), self.size.width())
@@ -188,14 +169,15 @@ class Document(QObject):
         transform = QTransform().rotate(angle)
         
         for layer in self.layers:
-             layer.image = layer.image.transformed(transform, Qt.TransformationMode.SmoothTransformation)
+             new_image = layer.image.transformed(transform, Qt.TransformationMode.SmoothTransformation)
+             cmd = LayerPropertyCommand(layer, "image", layer.image, new_image, signal_callback=lambda l=layer: self.invalidate_layer_cache(l.id))
+             macro.add_command(cmd)
+             cmd.execute()
              
-        self.selection_mask = self.selection_mask.transformed(transform, Qt.TransformationMode.FastTransformation)
-        self._update_selection_region()
-        
-        for cmd in canvas_cmds:
-             cmd.capture_after()
-        sel_cmd.new_mask = self.selection_mask.copy()
+        new_mask = self.selection_mask.transformed(transform, Qt.TransformationMode.FastTransformation)
+        sel_cmd = SelectionCommand(self, self.selection_mask, new_mask)
+        macro.add_command(sel_cmd)
+        sel_cmd.execute()
         
         self.history.push(macro)
         self.content_changed.emit()

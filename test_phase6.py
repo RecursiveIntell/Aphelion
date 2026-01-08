@@ -2,13 +2,13 @@ import sys
 import unittest
 import os
 import shutil
-from src.core.plugins import PluginManager, AphelionPlugin
-from src.core.effects import EffectRegistry, Effect
+from aphelion.core.plugins import PluginManager, AphelionPlugin
+from aphelion.core.effects import EffectRegistry, Effect
 
 # Dummy Plugin Content
 PLUGIN_CODE = """
-from src.core.plugins import AphelionPlugin
-from src.core.effects import EffectRegistry, Effect
+from aphelion.core.plugins import AphelionPlugin
+from aphelion.core.effects import EffectRegistry, Effect
 from PySide6.QtGui import QImage
 
 class TestEffect(Effect):
@@ -63,6 +63,21 @@ class TestPhase6(unittest.TestCase):
         self.assertIn("Plugins", effects)
         names = [e.name for e in effects["Plugins"]]
         self.assertIn("Test Effect Plugin", names)
+
+    def test_broken_plugin(self):
+        # Create a plugin with syntax error
+        broken_code = "This is not python code..."
+
+        path = os.path.join(self.test_dir, "broken_plugin.py")
+        with open(path, "w") as f:
+            f.write(broken_code)
+
+        # Should catch exception and not crash
+        self.manager.discover_plugins([self.test_dir])
+        # We expect 1 valid plugin from previous setup (MyPlugin) and 0 broken ones added.
+        # But discover_plugins is additive or resets? It scans directory.
+        # Since we are using same manager instance and same dir, it might reload MyPlugin.
+        pass # The test is just that it doesn't crash.
 
 if __name__ == '__main__':
     unittest.main()

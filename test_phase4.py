@@ -3,8 +3,8 @@ import unittest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtCore import QSize, Qt
-from src.core.document import Document
-from src.core.layer import Layer
+from aphelion.core.document import Document
+from aphelion.core.layer import Layer
 
 # Init App
 app = QApplication.instance() or QApplication(sys.argv)

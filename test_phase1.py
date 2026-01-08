@@ -4,11 +4,11 @@ from PySide6.QtCore import QSize, QRect
 from PySide6.QtGui import QColor
 
 # Setup app for Qt types
-app = QApplication(sys.argv)
+app = QApplication.instance() or QApplication(sys.argv)
 
 try:
-    from src.core.document import Document
-    from src.core.layer import Layer
+    from aphelion.core.document import Document
+    from aphelion.core.layer import Layer
     
     print("Initializing Document...")
     doc = Document(800, 600)
@@ -56,7 +56,7 @@ try:
     from PySide6.QtGui import QBitmap, QRegion
     from PySide6.QtCore import Qt
     debug_mask = doc.selection_mask.createMaskFromColor(0, Qt.MaskMode.MaskOutColor)
-    print(f"Debug Mask pixel at 50,50: {debug_mask.pixelIndex(50, 50)}")
+    # print(f"Debug Mask pixel at 50,50: {debug_mask.pixelIndex(50, 50)}")
     debug_bmp = QBitmap.fromImage(debug_mask)
     debug_rgn = QRegion(debug_bmp)
     print(f"Debug Region contains 50,50: {debug_rgn.contains(QPoint(50, 50))}")

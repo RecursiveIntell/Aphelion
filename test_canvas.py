@@ -2,8 +2,8 @@ import sys
 import unittest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QPoint, QRect
-from src.core.document import Document
-from src.ui.canvas import CanvasWidget
+from aphelion.core.document import Document
+from aphelion.ui.canvas import CanvasWidget
 
 # Init App
 app = QApplication.instance() or QApplication(sys.argv)
@@ -89,9 +89,9 @@ class TestCanvasWidget(unittest.TestCase):
         
     def test_set_tool_deactivates_previous(self):
         """Test setting a new tool deactivates the old one."""
-        from src.core.session import Session
-        from src.tools.brush import BrushTool
-        from src.tools.eraser import EraserTool
+        from aphelion.core.session import Session
+        from aphelion.tools.brush import BrushTool
+        from aphelion.tools.eraser import EraserTool
         
         session = Session()
         brush = BrushTool(self.doc, session)

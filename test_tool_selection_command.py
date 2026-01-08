@@ -4,11 +4,11 @@ from PySide6.QtCore import QSize, QRect, QPoint, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, qAlpha
 
 # Setup app for Qt types
-app = QApplication(sys.argv)
+app = QApplication.instance() or QApplication(sys.argv)
 
 try:
-    from src.aphelion.core.document import Document
-    from src.aphelion.tools.selection import EllipseSelectTool, LassoSelectTool
+    from aphelion.core.document import Document
+    from aphelion.tools.selection import EllipseSelectTool, LassoSelectTool
 
     print("Initializing Document...")
     doc = Document(200, 200)

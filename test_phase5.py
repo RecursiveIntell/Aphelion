@@ -2,9 +2,9 @@ import sys
 import unittest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor, QImage
-from src.core.effects import EffectRegistry
-from src.effects import register_all_effects
-from src.effects.adjustments import InvertEffect, AutoLevelEffect, HueSaturationEffect
+from aphelion.core.effects import EffectRegistry
+from aphelion.effects import register_all_effects
+from aphelion.effects.adjustments import InvertEffect, AutoLevelEffect, HueSaturationEffect
 
 # Init App
 app = QApplication.instance() or QApplication(sys.argv)

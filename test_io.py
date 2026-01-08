@@ -4,8 +4,8 @@ import os
 import tempfile
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor, QPainter
-from src.core.document import Document
-from src.core.io import ProjectIO
+from aphelion.core.document import Document
+from aphelion.core.io import ProjectIO
 
 # Init App
 app = QApplication.instance() or QApplication(sys.argv)
@@ -113,12 +113,12 @@ class TestHistoryManagerEdgeCases(unittest.TestCase):
         
     def test_history_limit_enforced(self):
         """Test that history respects the limit."""
-        # Default limit is 50, add 55 operations
-        for i in range(55):
+        # Default limit is 100, add 110 operations
+        for i in range(110):
             self.doc.add_layer(f"Layer {i}")
             
-        # Should have at most 50 items
-        self.assertLessEqual(len(self.doc.history.undo_stack), 50)
+        # Should have at most 100 items
+        self.assertLessEqual(len(self.doc.history.undo_stack), 100)
         
     def test_goto_index_within_bounds(self):
         """Test goto_index navigates history correctly."""

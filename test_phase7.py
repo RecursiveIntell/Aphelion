@@ -4,8 +4,8 @@ import shutil
 import os
 from PySide6.QtWidgets import QApplication, QPushButton
 from PySide6.QtCore import QByteArray
-from src.core.settings import SettingsManager
-from src.ui.panels.tools_dock import ToolsDock
+from aphelion.core.settings import SettingsManager
+from aphelion.ui.panels.tools_dock import ToolsDock
 
 # Init App
 app = QApplication.instance() or QApplication(sys.argv)
@@ -32,13 +32,13 @@ class TestPhase7(unittest.TestCase):
     def test_shortcuts_assigned(self):
         # ToolsDock should assign shortcuts
         # We need a dummy Document/Session to init ToolsDock
-        from src.core.session import Session
-        from src.core.document import Document
+        from aphelion.core.session import Session
+        from aphelion.core.document import Document
         session = Session()
         doc = Document(10, 10)
         
         dock = ToolsDock(session)
-        dock.initialize_standard_tools(doc)
+        dock.set_active_document(doc)
         
         # Check Brush Shortcut
         self.assertIn("Brush", dock.tools)

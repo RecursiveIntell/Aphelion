@@ -33,6 +33,7 @@ class PaintBucketTool(Tool):
         # Let's reuse the BFS logic for now (duplicated - should refactor to Utils)
         # Use primary color
         fill_color = self.session.primary_color
+        # Convert QColor to target space? No, target_color is QColor.
         self.fill(layer.image, pos, target_color, fill_color)
         
         cmd.capture_after()
