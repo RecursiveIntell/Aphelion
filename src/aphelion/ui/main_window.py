@@ -513,11 +513,13 @@ class MainWindow(QMainWindow):
             # Crop to selection
             r = doc.get_selection_region().boundingRect()
             img = layer.image.copy(r)
-            # Mask?
-            # Ideal: Mask out non-selected.
-            # Convert Selection Mask to Bitmap, apply clip.
-            # TODO: Proper masked copy. 
-            pass
+
+            # Mask out non-selected.
+            # Get the selection mask cropped to the same region
+            mask = doc.selection_mask.copy(r)
+
+            # Apply the mask to the alpha channel
+            img.setAlphaChannel(mask)
         else:
             img = layer.image.copy()
             
