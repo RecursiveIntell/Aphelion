@@ -803,6 +803,7 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 doc = ProjectIO.load_project(filepath)
+                doc.file_path = filepath
                 # Add to Recents
                 self.settings.add_recent_file(filepath)
                 self.update_recents_menu()
@@ -853,7 +854,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to open image: {e}")
 
     def save_project(self):
-        self.save_project_as() # TODO: cache path in tab
+        doc = self.active_document()
+        if not doc: return
+
+        # Check if we have a valid project path to save to
+        # Safety check: ensure it ends with .aphelion to avoid overwriting source images
+        if doc.file_path and doc.file_path.endswith(".aphelion"):
+            try:
+                ProjectIO.save_project(doc, doc.file_path)
+                # Update recents just in case
+                self.settings.add_recent_file(doc.file_path)
+                self.update_recents_menu()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save: {e}")
+        else:
+            self.save_project_as()
 
     def save_project_as(self):
         doc = self.active_document()
@@ -863,6 +878,7 @@ class MainWindow(QMainWindow):
             if not filepath.endswith(".aphelion"): filepath += ".aphelion"
             try:
                 ProjectIO.save_project(doc, filepath)
+                doc.file_path = filepath
                 # Add to Recents
                 self.settings.add_recent_file(filepath)
                 self.update_recents_menu()
