@@ -220,9 +220,11 @@ class LayerPanel(QWidget):
         if not layer: return
         mode = BLK_MODES.get(text, QPainter.CompositionMode.CompositionMode_SourceOver)
         if layer.blend_mode != mode:
-            # TODO: Command
-            layer.blend_mode = mode
-            self.document.content_changed.emit()
+            old_mode = layer.blend_mode
+            command = LayerPropertyCommand(layer, "blend_mode", old_mode, mode,
+                                           signal_callback=lambda: self.document.content_changed.emit())
+            self.document.history.push(command)
+            command.execute()
 
     def on_opacity_changed(self, value):
         layer = self.document.get_active_layer()
