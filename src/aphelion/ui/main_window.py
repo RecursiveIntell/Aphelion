@@ -969,13 +969,19 @@ class MainWindow(QMainWindow):
                 
                 cmd = MacroCommand("Layer Properties")
                 
+                from ..core.commands import LayerPropertyCommand
+
                 # Name
                 if layer.name != name:
-                    pass # TODO: Command for rename? Or just property command handles it?
-                    # LayerPropertyCommand handles name, opacity, blend_mode
+                    cmd.add_command(LayerPropertyCommand(layer, "name", layer.name, name))
                 
-                from ..core.commands import LayerPropertyCommand
-                cmd.add_command(LayerPropertyCommand(layer, name, opacity, blend_mode))
+                # Opacity
+                if abs(layer.opacity - opacity) > 0.001:
+                    cmd.add_command(LayerPropertyCommand(layer, "opacity", layer.opacity, opacity))
+
+                # Blend Mode
+                if layer.blend_mode != blend_mode:
+                    cmd.add_command(LayerPropertyCommand(layer, "blend_mode", layer.blend_mode, blend_mode))
                 
                 doc.history.push(cmd)
                 cmd.execute()
