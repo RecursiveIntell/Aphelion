@@ -19,19 +19,7 @@ class ShapeTool(Tool):
         if self.is_drawing:
             self.current_pos = pos
             # Request overlay update
-            # We need a way to trigger canvas update without modifying content
-            # The canvas usually updates on content_changed signal.
-            # We might need a separate signal for "overlay_changed" or just reuse content_changed 
-            # but that implies doc change (which isn't true yet).
-            # For now, let's assume canvas repaints on mouse move if tool is active?
-            # Actually, we need to tell the view to update the overlay.
-            # In Aphelion current architecture, tool events come from CanvasWidget.
-            # CanvasWidget should probably update() on mouse move if tool says so.
-            # But let's just use a hack: document.content_changed.emit() forces repaint even if no content changed?
-            # It's inefficient but works for MVP.
-            # Better: We'll add a signal to Tool or Session? 
-            # Or just assume CanvasWidget calls update() after mouse_move.
-            pass
+            self.document.overlay_changed.emit()
 
     def mouse_release(self, pos: QPoint):
         if self.is_drawing:
