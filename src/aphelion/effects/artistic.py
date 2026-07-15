@@ -3,10 +3,11 @@ Artistic effects for Aphelion.
 Pencil Sketch, Ink Sketch, Crystallize - NumPy optimized.
 """
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QSlider, QDialogButtonBox, QSpinBox)
+from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage
 import numpy as np
 from scipy.ndimage import sobel
@@ -15,40 +16,16 @@ from scipy.spatial import cKDTree
 
 # ----------------- Pencil Sketch Effect -----------------
 
-class PencilSketchDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Pencil Sketch")
-        
-        layout = QVBoxLayout()
-        
-        # Stroke intensity
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Detail:"))
-        self.s_slider = QSlider(Qt.Orientation.Horizontal)
-        self.s_slider.setRange(1, 10)
-        self.s_slider.setValue(5)
-        s_layout.addWidget(self.s_slider)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"detail": self.s_slider.value()}
-
-
 class PencilSketchEffect(Effect):
     """Pencil sketch artistic effect - NumPy optimized."""
     name = "Pencil Sketch"
     category = "Artistic"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return PencilSketchDialog(parent)
+        controls = [
+            create_slider_control("detail", "Detail:", 5, 1, 10),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         detail = config.get("detail", 5)
@@ -83,40 +60,16 @@ class PencilSketchEffect(Effect):
 
 # ----------------- Ink Sketch Effect -----------------
 
-class InkSketchDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Ink Sketch")
-        
-        layout = QVBoxLayout()
-        
-        # Coverage
-        c_layout = QHBoxLayout()
-        c_layout.addWidget(QLabel("Ink Coverage:"))
-        self.c_slider = QSlider(Qt.Orientation.Horizontal)
-        self.c_slider.setRange(1, 100)
-        self.c_slider.setValue(50)
-        c_layout.addWidget(self.c_slider)
-        layout.addLayout(c_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"coverage": self.c_slider.value()}
-
-
 class InkSketchEffect(Effect):
     """Ink sketch effect with high contrast edges - NumPy optimized."""
     name = "Ink Sketch"
     category = "Artistic"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return InkSketchDialog(parent)
+        controls = [
+            create_slider_control("coverage", "Ink Coverage:", 50, 1, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         coverage = config.get("coverage", 50)
@@ -148,40 +101,16 @@ class InkSketchEffect(Effect):
 
 # ----------------- Crystallize Effect -----------------
 
-class CrystallizeDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Crystallize")
-        
-        layout = QVBoxLayout()
-        
-        # Cell size
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Cell Size:"))
-        self.s_spin = QSpinBox()
-        self.s_spin.setRange(3, 50)
-        self.s_spin.setValue(10)
-        s_layout.addWidget(self.s_spin)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"cell_size": self.s_spin.value()}
-
-
 class CrystallizeEffect(Effect):
     """Crystallize effect using Voronoi-like cells - NumPy optimized."""
     name = "Crystallize"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return CrystallizeDialog(parent)
+        controls = [
+            create_slider_control("cell_size", "Cell Size:", 10, 3, 50),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         cell_size = config.get("cell_size", 10)

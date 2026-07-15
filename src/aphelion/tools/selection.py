@@ -3,6 +3,7 @@ from PySide6.QtGui import QPainter, QColor, QPainterPath, QImage
 from PySide6.QtWidgets import QApplication
 from .tool import Tool
 from ..core.document import Document
+from ..utils.flood_fill import flood_fill_mask
 
 class EllipseSelectTool(Tool):
     def __init__(self, document, session):
@@ -139,19 +140,21 @@ class MagicWandTool(Tool):
     def __init__(self, document, session):
         super().__init__(document, session)
         self.name = "Magic Wand"
-        self.tolerance = 30 # Default
 
     def mouse_press(self, pos: QPoint):
         # Flood fill from pos
         layer = self.document.get_active_layer()
         if not layer: return
-        
+
         # Get target color
         target_color = layer.image.pixelColor(pos)
-        
+
+        # Use tolerance from session
+        tolerance = self.session.tolerance if self.session else 32
+
         # Perform Flood Fill -> Generate Mask
         # This is expensive. Should run in thread? For V1, synchronous.
-        mask = self.flood_fill(layer.image, pos, target_color, self.tolerance)
+        mask = self.flood_fill(layer.image, pos, target_color, tolerance)
         
         # Apply
         mode = self.session.selection_mode
@@ -172,45 +175,5 @@ class MagicWandTool(Tool):
         pass
 
     def flood_fill(self, image: QImage, seed: QPoint, target_color: QColor, tolerance: int) -> QImage:
-        # Returns Alpha8 mask
-        width = image.width()
-        height = image.height()
-        mask = QImage(width, height, QImage.Format.Format_Alpha8)
-        mask.fill(0)
-        
-        # Fast BFS
-        queue = [(seed.x(), seed.y())]
-        visited = set()
-        visited.add((seed.x(), seed.y()))
-        
-        tr, tg, tb, ta = target_color.red(), target_color.green(), target_color.blue(), target_color.alpha()
-        
-        # Set seed
-        mask.setPixelColor(seed, QColor(255, 255, 255))
-        
-        # Loop
-        while queue:
-            x, y = queue.pop(0)
-            
-            # Neighbors
-            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                nx, ny = x + dx, y + dy
-                
-                if 0 <= nx < width and 0 <= ny < height:
-                    if (nx, ny) not in visited:
-                        visited.add((nx, ny))
-                        
-                        # Fast check
-                        c_int = image.pixel(nx, ny)
-                        cr = (c_int >> 16) & 0xFF
-                        cg = (c_int >> 8) & 0xFF
-                        cb = c_int & 0xFF
-                        ca = (c_int >> 24) & 0xFF
-                        
-                        dist = max(abs(cr - tr), abs(cg - tg), abs(cb - tb), abs(ca - ta))
-                        
-                        if dist <= tolerance:
-                             mask.setPixelColor(nx, ny, QColor(255, 255, 255))
-                             queue.append((nx, ny))
-                             
-        return mask
+        """Returns Alpha8 mask using shared flood fill implementation."""
+        return flood_fill_mask(image, seed, tolerance, use_alpha=True)

@@ -3,84 +3,29 @@
 Optimized with NumPy for high-performance image processing.
 """
 from PySide6.QtGui import QImage, QColor, QPainter
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QSpinBox, QCheckBox
+from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage, gaussian_blur_np, box_blur_np
 import numpy as np
 import math
-
-
-class DropShadowDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Drop Shadow")
-        layout = QVBoxLayout()
-        
-        # Offset X
-        ox_layout = QHBoxLayout()
-        ox_layout.addWidget(QLabel("Offset X:"))
-        self.ox_spin = QSpinBox()
-        self.ox_spin.setRange(-100, 100)
-        self.ox_spin.setValue(5)
-        ox_layout.addWidget(self.ox_spin)
-        layout.addLayout(ox_layout)
-        
-        # Offset Y
-        oy_layout = QHBoxLayout()
-        oy_layout.addWidget(QLabel("Offset Y:"))
-        self.oy_spin = QSpinBox()
-        self.oy_spin.setRange(-100, 100)
-        self.oy_spin.setValue(5)
-        oy_layout.addWidget(self.oy_spin)
-        layout.addLayout(oy_layout)
-        
-        # Blur radius
-        blur_layout = QHBoxLayout()
-        blur_layout.addWidget(QLabel("Blur:"))
-        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
-        self.blur_slider.setRange(0, 50)
-        self.blur_slider.setValue(10)
-        blur_layout.addWidget(self.blur_slider)
-        self.blur_val = QLabel("10")
-        self.blur_slider.valueChanged.connect(lambda v: self.blur_val.setText(str(v)))
-        blur_layout.addWidget(self.blur_val)
-        layout.addLayout(blur_layout)
-        
-        # Opacity
-        opacity_layout = QHBoxLayout()
-        opacity_layout.addWidget(QLabel("Opacity:"))
-        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(0, 100)
-        self.opacity_slider.setValue(60)
-        opacity_layout.addWidget(self.opacity_slider)
-        self.opacity_val = QLabel("60%")
-        self.opacity_slider.valueChanged.connect(lambda v: self.opacity_val.setText(f"{v}%"))
-        opacity_layout.addWidget(self.opacity_val)
-        layout.addLayout(opacity_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "offset_x": self.ox_spin.value(),
-            "offset_y": self.oy_spin.value(),
-            "blur": self.blur_slider.value(),
-            "opacity": self.opacity_slider.value()
-        }
 
 
 class DropShadowEffect(Effect):
     """Add a drop shadow behind non-transparent content."""
     name = "Drop Shadow"
     category = "Stylize"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return DropShadowDialog(parent)
+        controls = [
+            create_slider_control("offset_x", "Offset X:", 5, -100, 100),
+            create_slider_control("offset_y", "Offset Y:", 5, -100, 100),
+            create_slider_control("blur", "Blur:", 10, 0, 50),
+            create_slider_control("opacity", "Opacity:", 60, 0, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         offset_x = config.get("offset_x", 5)
@@ -134,70 +79,19 @@ class DropShadowEffect(Effect):
         return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
 
 
-class ChannelShiftDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Channel Shift")
-        layout = QVBoxLayout()
-        
-        # Red channel offset X
-        rx_layout = QHBoxLayout()
-        rx_layout.addWidget(QLabel("Red X:"))
-        self.rx_spin = QSpinBox()
-        self.rx_spin.setRange(-50, 50)
-        self.rx_spin.setValue(-5)
-        rx_layout.addWidget(self.rx_spin)
-        layout.addLayout(rx_layout)
-        
-        # Red channel offset Y
-        ry_layout = QHBoxLayout()
-        ry_layout.addWidget(QLabel("Red Y:"))
-        self.ry_spin = QSpinBox()
-        self.ry_spin.setRange(-50, 50)
-        self.ry_spin.setValue(0)
-        ry_layout.addWidget(self.ry_spin)
-        layout.addLayout(ry_layout)
-        
-        # Blue channel offset X
-        bx_layout = QHBoxLayout()
-        bx_layout.addWidget(QLabel("Blue X:"))
-        self.bx_spin = QSpinBox()
-        self.bx_spin.setRange(-50, 50)
-        self.bx_spin.setValue(5)
-        bx_layout.addWidget(self.bx_spin)
-        layout.addLayout(bx_layout)
-        
-        # Blue channel offset Y
-        by_layout = QHBoxLayout()
-        by_layout.addWidget(QLabel("Blue Y:"))
-        self.by_spin = QSpinBox()
-        self.by_spin.setRange(-50, 50)
-        self.by_spin.setValue(0)
-        by_layout.addWidget(self.by_spin)
-        layout.addLayout(by_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "red_x": self.rx_spin.value(),
-            "red_y": self.ry_spin.value(),
-            "blue_x": self.bx_spin.value(),
-            "blue_y": self.by_spin.value()
-        }
-
-
 class ChannelShiftEffect(Effect):
     """RGB channel displacement for chromatic aberration/glitch effects."""
     name = "Channel Shift"
     category = "Stylize"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return ChannelShiftDialog(parent)
+        controls = [
+            create_slider_control("red_x", "Red X:", -5, -50, 50),
+            create_slider_control("red_y", "Red Y:", 0, -50, 50),
+            create_slider_control("blue_x", "Blue X:", 5, -50, 50),
+            create_slider_control("blue_y", "Blue Y:", 0, -50, 50),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         red_x = config.get("red_x", -5)
@@ -220,56 +114,17 @@ class ChannelShiftEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class BokehBlurDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Bokeh Blur")
-        layout = QVBoxLayout()
-        
-        # Radius
-        r_layout = QHBoxLayout()
-        r_layout.addWidget(QLabel("Radius:"))
-        self.radius_slider = QSlider(Qt.Orientation.Horizontal)
-        self.radius_slider.setRange(1, 30)
-        self.radius_slider.setValue(8)
-        r_layout.addWidget(self.radius_slider)
-        self.radius_val = QLabel("8")
-        self.radius_slider.valueChanged.connect(lambda v: self.radius_val.setText(str(v)))
-        r_layout.addWidget(self.radius_val)
-        layout.addLayout(r_layout)
-        
-        # Brightness boost for highlights
-        b_layout = QHBoxLayout()
-        b_layout.addWidget(QLabel("Brightness:"))
-        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.brightness_slider.setRange(0, 100)
-        self.brightness_slider.setValue(20)
-        b_layout.addWidget(self.brightness_slider)
-        self.brightness_val = QLabel("20")
-        self.brightness_slider.valueChanged.connect(lambda v: self.brightness_val.setText(str(v)))
-        b_layout.addWidget(self.brightness_val)
-        layout.addLayout(b_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "radius": self.radius_slider.value(),
-            "brightness": self.brightness_slider.value()
-        }
-
-
 class BokehBlurEffect(Effect):
     """Bokeh (lens) blur with circular aperture simulation."""
     name = "Bokeh Blur"
     category = "Blurs"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return BokehBlurDialog(parent)
+        controls = [
+            create_slider_control("radius", "Radius:", 8, 1, 30),
+            create_slider_control("brightness", "Brightness:", 20, 0, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         radius = config.get("radius", 8)
@@ -314,56 +169,17 @@ class BokehBlurEffect(Effect):
         return numpy_to_qimage(np.clip(result, 0, 255).astype(np.uint8))
 
 
-class SketchBlurDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Sketch Blur")
-        layout = QVBoxLayout()
-        
-        # Radius
-        r_layout = QHBoxLayout()
-        r_layout.addWidget(QLabel("Radius:"))
-        self.radius_slider = QSlider(Qt.Orientation.Horizontal)
-        self.radius_slider.setRange(1, 20)
-        self.radius_slider.setValue(3)
-        r_layout.addWidget(self.radius_slider)
-        self.radius_val = QLabel("3")
-        self.radius_slider.valueChanged.connect(lambda v: self.radius_val.setText(str(v)))
-        r_layout.addWidget(self.radius_val)
-        layout.addLayout(r_layout)
-        
-        # Edge threshold
-        t_layout = QHBoxLayout()
-        t_layout.addWidget(QLabel("Edge Threshold:"))
-        self.threshold_slider = QSlider(Qt.Orientation.Horizontal)
-        self.threshold_slider.setRange(1, 100)
-        self.threshold_slider.setValue(30)
-        t_layout.addWidget(self.threshold_slider)
-        self.threshold_val = QLabel("30")
-        self.threshold_slider.valueChanged.connect(lambda v: self.threshold_val.setText(str(v)))
-        t_layout.addWidget(self.threshold_val)
-        layout.addLayout(t_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "radius": self.radius_slider.value(),
-            "threshold": self.threshold_slider.value()
-        }
-
-
 class SketchBlurEffect(Effect):
     """Edge-preserving blur that maintains sketch-like details."""
     name = "Sketch Blur"
     category = "Blurs"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return SketchBlurDialog(parent)
+        controls = [
+            create_slider_control("radius", "Radius:", 3, 1, 20),
+            create_slider_control("threshold", "Edge Threshold:", 30, 1, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         radius = config.get("radius", 3)

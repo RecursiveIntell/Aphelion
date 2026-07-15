@@ -32,8 +32,6 @@ class ToolsDock(QWidget):
         self.layout.addLayout(self.grid)
         
         # Tool Options moved to ToolOptionsBar
-        
-        self.layout.addStretch()
 
         self.layout.addStretch()
         self.setLayout(self.layout)

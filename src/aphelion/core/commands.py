@@ -164,11 +164,14 @@ class LayerStructureCommand(Command):
                 if self.document._active_layer_index >= len(self.document.layers):
                     self.document.set_active_layer(len(self.document.layers) - 1)
         elif self.action == "move":
-            layer = self.document.layers.pop(self.previous_index)
-            self.document.layers.insert(self.index, layer)
-            self.document.content_changed.emit()
-            if self.document.get_active_layer() == layer:
-                self.document.set_active_layer(self.index)
+            # Use stored layer reference if available, otherwise fall back to index
+            layer = self.layer if self.layer else self.document.layers[self.previous_index]
+            if layer in self.document.layers:
+                self.document.layers.remove(layer)
+                self.document.layers.insert(self.index, layer)
+                self.document.content_changed.emit()
+                if self.document.get_active_layer() == layer:
+                    self.document.set_active_layer(self.index)
 
     def undo(self):
         if self.action == "add":
@@ -181,11 +184,14 @@ class LayerStructureCommand(Command):
             self.document.layer_added.emit(self.layer)
             self.document.set_active_layer(self.index)
         elif self.action == "move":
-            layer = self.document.layers.pop(self.index)
-            self.document.layers.insert(self.previous_index, layer)
-            self.document.content_changed.emit()
-            if self.document.get_active_layer() == layer:
-                self.document.set_active_layer(self.previous_index)
+            # Use stored layer reference if available, otherwise fall back to index
+            layer = self.layer if self.layer else self.document.layers[self.index]
+            if layer in self.document.layers:
+                self.document.layers.remove(layer)
+                self.document.layers.insert(self.previous_index, layer)
+                self.document.content_changed.emit()
+                if self.document.get_active_layer() == layer:
+                    self.document.set_active_layer(self.previous_index)
     
     def memory_bytes(self) -> int:
         """Structure commands reference layers, don't copy them."""

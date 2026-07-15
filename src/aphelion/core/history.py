@@ -4,6 +4,7 @@ History management with byte-based memory limits.
 Evicts oldest entries when memory budget is exceeded.
 """
 from abc import ABC, abstractmethod
+from typing import Final
 
 
 class Command(ABC):
@@ -30,7 +31,7 @@ class HistoryManager:
     """
     
     # Default 500MB limit - reasonable for most systems
-    DEFAULT_MEMORY_LIMIT_MB = 500
+    DEFAULT_MEMORY_LIMIT_MB: Final = 500
     
     def __init__(self, limit: int = 100, memory_limit_mb: int = None):
         """

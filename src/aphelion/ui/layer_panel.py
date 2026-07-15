@@ -46,7 +46,6 @@ class LayerPanel(QWidget):
         self.btn_props.setFixedSize(30, 25)
         self.btn_props.clicked.connect(self.open_properties)
         ctrl_layout.addWidget(self.btn_props)
-        ctrl_layout.addWidget(self.btn_props)
         
         self.chk_edit_mask = QCheckBox("Edit Mask")
         self.chk_edit_mask.clicked.connect(self.on_edit_mask_toggled)
@@ -207,13 +206,12 @@ class LayerPanel(QWidget):
 
 
     def update_selection_from_model(self):
-         doc_index = self.document._active_layer_index
-         if doc_index != -1:
-             count = len(self.document.layers)
-             list_index = (count - 1) - doc_index
-             list_index = (count - 1) - doc_index
-             self.list_widget.setCurrentRow(list_index)
-             self.update_controls()
+        doc_index = self.document._active_layer_index
+        if doc_index != -1:
+            count = len(self.document.layers)
+            list_index = (count - 1) - doc_index
+            self.list_widget.setCurrentRow(list_index)
+            self.update_controls()
 
     def on_blend_mode_changed(self, text):
         layer = self.document.get_active_layer()
@@ -227,9 +225,11 @@ class LayerPanel(QWidget):
     def on_opacity_changed(self, value):
         layer = self.document.get_active_layer()
         if not layer: return
-        if layer.opacity != value:
+        # Convert slider value (0-255) to opacity (0.0-1.0)
+        opacity = value / 255.0
+        if abs(layer.opacity - opacity) > 0.001:
             # TODO: Command
-            layer.opacity = value
+            layer.opacity = opacity
             self.document.content_changed.emit()
 
     def update_controls(self):
@@ -247,7 +247,8 @@ class LayerPanel(QWidget):
         self.combo_mode.blockSignals(True)
         self.chk_edit_mask.blockSignals(True)
         
-        self.slider_opacity.setValue(layer.opacity)
+        # Convert opacity (0.0-1.0) to slider value (0-255)
+        self.slider_opacity.setValue(int(layer.opacity * 255))
         mode_name = MODE_NAMES.get(layer.blend_mode, "Normal")
         self.combo_mode.setCurrentText(mode_name)
         

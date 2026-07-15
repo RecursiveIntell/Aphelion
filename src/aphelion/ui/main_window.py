@@ -6,6 +6,9 @@ from PySide6.QtCore import Qt
 from ..core.document import Document
 from ..core.session import Session
 from ..core.io import ProjectIO
+from ..core.logging import get_logger
+
+logger = get_logger(__name__)
 from .canvas import CanvasWidget
 from .layer_panel import LayerPanel
 from .panels.history_panel import HistoryPanel
@@ -174,9 +177,8 @@ class MainWindow(QMainWindow):
         # to avoid conflicts and ensure proper event propagation
         pass
     
-    def _swap_colors_debug(self):
-        """Debug wrapper for swap colors."""
-        print("DEBUG: X shortcut activated - swapping colors!")
+    def _swap_colors(self):
+        """Swap primary and secondary colors."""
         self.session.swap_colors()
 
     def eventFilter(self, obj, event):
@@ -348,7 +350,7 @@ class MainWindow(QMainWindow):
                 
             self.tools_dock_widget.register_tool(name, tool_instance, r, c, icon, shortcut)
         except Exception as e:
-            print(f"Failed to instantiate plugin tool {name}: {e}")
+            logger.error(f"Failed to instantiate plugin tool {name}: {e}", exc_info=True)
         
     def setup_docks(self):
         # 1. Tools (Left)
@@ -408,7 +410,7 @@ class MainWindow(QMainWindow):
         
         # Zoom Controls
         self.slider_zoom = QSlider(Qt.Horizontal)
-        self.slider_zoom.setRange(10, 500) # 10% to 500%
+        self.slider_zoom.setRange(10, 1600)  # 10% to 1600% (practical range)
         self.slider_zoom.setValue(100)
         self.slider_zoom.setFixedWidth(100)
         self.slider_zoom.valueChanged.connect(self.on_zoom_slider)
@@ -490,17 +492,35 @@ class MainWindow(QMainWindow):
             self.set_zoom(new_zoom)
 
     def cut(self):
+        """Cut: Copy then clear selected region or layer."""
         self.copy()
-        # Clear selection or active layer content?
-        # If selection active: clear selection.
-        # Else: clear layer.
         doc = self.active_document()
-        if doc: 
-            # Check if selection active?
-            # doc.clear_selection_content() # Need this method?
-            # Or use CanvasCommand to clear.
-            # Simplified:
-            pass
+        if not doc:
+            return
+        layer = doc.get_active_layer()
+        if not layer:
+            return
+
+        from ..core.commands import CanvasCommand
+        from PySide6.QtGui import QPainter, QColor
+
+        cmd = CanvasCommand(layer)
+
+        if doc.has_selection:
+            # Clear selected region
+            region = doc.get_selection_region()
+            painter = QPainter(layer.image)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+            painter.setClipRegion(region)
+            painter.fillRect(layer.image.rect(), QColor(0, 0, 0, 0))
+            painter.end()
+        else:
+            # Clear entire layer
+            layer.image.fill(QColor(0, 0, 0, 0))
+
+        cmd.capture_after()
+        doc.history.push(cmd)
+        doc.content_changed.emit()
 
     def copy(self):
         doc = self.active_document()
@@ -938,49 +958,39 @@ class MainWindow(QMainWindow):
         if doc: doc.duplicate_layer(doc._active_layer_index)
 
     def open_layer_properties(self):
-        print("DEBUG: open_layer_properties called")
+        """Open layer properties dialog."""
         doc = self.active_document()
-        if not doc: 
-            print("DEBUG: No active document")
+        if not doc:
             return
         layer = doc.get_active_layer()
-        if not layer: 
-            print("DEBUG: No active layer")
+        if not layer:
             return
-        
-        print(f"DEBUG: Opening dialog for layer {layer.name}")
+
         try:
             from .dialogs.layer_properties import LayerPropertiesDialog
-            print("DEBUG: Import successful")
             dlg = LayerPropertiesDialog(self, layer)
             if dlg.exec():
-                print("DEBUG: Dialog accepted")
                 name, opacity, blend_mode = dlg.get_values()
 
-            
-                print("DEBUG: Dialog accepted")
-                name, opacity, blend_mode = dlg.get_values()
-                
-                # Check changes
-                if layer.name == name and abs(layer.opacity - opacity) < 0.01 and layer.blend_mode == blend_mode:
+                # Check if anything changed
+                if layer.name == name and layer.opacity == opacity and layer.blend_mode == blend_mode:
                     return
-                
+
                 cmd = MacroCommand("Layer Properties")
-                
-                # Name
-                if layer.name != name:
-                    pass # TODO: Command for rename? Or just property command handles it?
-                    # LayerPropertyCommand handles name, opacity, blend_mode
-                
+
                 from ..core.commands import LayerPropertyCommand
-                cmd.add_command(LayerPropertyCommand(layer, name, opacity, blend_mode))
-                
+                # Create property commands for each changed property
+                if layer.name != name:
+                    cmd.add_command(LayerPropertyCommand(layer, "name", layer.name, name, doc.content_changed.emit))
+                if layer.opacity != opacity:
+                    cmd.add_command(LayerPropertyCommand(layer, "opacity", layer.opacity, opacity, doc.content_changed.emit))
+                if layer.blend_mode != blend_mode:
+                    cmd.add_command(LayerPropertyCommand(layer, "blend_mode", layer.blend_mode, blend_mode, doc.content_changed.emit))
+
                 doc.history.push(cmd)
                 cmd.execute()
         except Exception as e:
-            print(f"DEBUG: Error in open_layer_properties: {e}")
-            import traceback
-            traceback.print_exc()
+            QMessageBox.warning(self, "Error", f"Failed to open layer properties: {e}")
                 
 
     def run_effect(self, effect_cls):
@@ -1036,7 +1046,6 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle global keyboard shortcuts."""
         if event.key() == Qt.Key.Key_X and not event.modifiers():
-            print("DEBUG: X pressed via keyPressEvent!")
             self.session.swap_colors()
             event.accept()
             return

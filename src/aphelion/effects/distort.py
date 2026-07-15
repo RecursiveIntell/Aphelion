@@ -4,48 +4,26 @@ Distortion and stylize effects for Aphelion.
 Optimized with NumPy for high-performance coordinate mapping.
 """
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QSpinBox
+from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage
 import numpy as np
 import math
 import random
 
 
-class PixelateDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Pixelate")
-        
-        layout = QVBoxLayout()
-        
-        # Cell size
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Cell Size:"))
-        self.s_spin = QSpinBox()
-        self.s_spin.setRange(2, 100)
-        self.s_spin.setValue(8)
-        s_layout.addWidget(self.s_spin)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"cell_size": self.s_spin.value()}
-
-
 class PixelateEffect(Effect):
     name = "Pixelate"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return PixelateDialog(parent)
+        controls = [
+            create_slider_control("cell_size", "Cell Size:", 8, 2, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         cell_size = config.get("cell_size", 8)
@@ -137,42 +115,15 @@ class EdgeDetectEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class AddNoiseDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Add Noise")
-        
-        layout = QVBoxLayout()
-        
-        # Intensity
-        i_layout = QHBoxLayout()
-        i_layout.addWidget(QLabel("Intensity:"))
-        self.i_slider = QSlider(Qt.Orientation.Horizontal)
-        self.i_slider.setRange(1, 100)
-        self.i_slider.setValue(25)
-        i_layout.addWidget(self.i_slider)
-        self.i_val = QLabel("25")
-        self.i_slider.valueChanged.connect(lambda v: self.i_val.setText(str(v)))
-        i_layout.addWidget(self.i_val)
-        layout.addLayout(i_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"intensity": self.i_slider.value()}
-
-
 class AddNoiseEffect(Effect):
     name = "Add Noise"
     category = "Noise"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return AddNoiseDialog(parent)
+        controls = [
+            create_slider_control("intensity", "Intensity:", 25, 1, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         intensity = config.get("intensity", 25)
@@ -217,39 +168,16 @@ class ReduceNoiseEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class RadialBlurDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Radial Blur")
-        
-        layout = QVBoxLayout()
-        
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(1, 50)
-        self.a_slider.setValue(10)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"amount": self.a_slider.value()}
-
-
 class RadialBlurEffect(Effect):
     """Radial/spin blur from center."""
     name = "Radial Blur"
     category = "Blurs"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return RadialBlurDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 10, 1, 50),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 10)
@@ -283,39 +211,16 @@ class RadialBlurEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class ZoomBlurDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Zoom Blur")
-        
-        layout = QVBoxLayout()
-        
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(1, 100)
-        self.a_slider.setValue(20)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"amount": self.a_slider.value()}
-
-
 class ZoomBlurEffect(Effect):
     """Zoom blur - radial blur that zooms from center."""
     name = "Zoom Blur"
     category = "Blurs"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return ZoomBlurDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 20, 1, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 20)
@@ -345,39 +250,16 @@ class ZoomBlurEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class BulgeDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Bulge")
-        
-        layout = QVBoxLayout()
-        
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(-100, 100)
-        self.a_slider.setValue(50)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"amount": self.a_slider.value()}
-
-
 class BulgeEffect(Effect):
     """Bulge/Pinch distortion from center."""
     name = "Bulge"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return BulgeDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 50, -100, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 50) / 100.0
@@ -413,39 +295,16 @@ class BulgeEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class TwistDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Twist")
-        
-        layout = QVBoxLayout()
-        
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Angle:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(-180, 180)
-        self.a_slider.setValue(45)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"angle": self.a_slider.value()}
-
-
 class TwistEffect(Effect):
     """Twist/Swirl distortion from center."""
     name = "Twist"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return TwistDialog(parent)
+        controls = [
+            create_slider_control("angle", "Angle:", 45, -180, 180),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         angle = math.radians(config.get("angle", 45))
@@ -478,47 +337,17 @@ class TwistEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class DentsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Dents")
-        
-        layout = QVBoxLayout()
-        
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(1, 50)
-        self.a_slider.setValue(10)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Scale:"))
-        self.s_spin = QSpinBox()
-        self.s_spin.setRange(5, 50)
-        self.s_spin.setValue(20)
-        s_layout.addWidget(self.s_spin)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"amount": self.a_slider.value(), "scale": self.s_spin.value()}
-
-
 class DentsEffect(Effect):
     """Dents - random displacement distortion."""
     name = "Dents"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return DentsDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 10, 1, 50),
+            create_slider_control("scale", "Scale:", 20, 5, 50),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 10)
@@ -540,69 +369,18 @@ class DentsEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class Rotate3DDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("3D Rotate / Zoom")
-        layout = QVBoxLayout()
-        
-        # Rotation X
-        rx_layout = QHBoxLayout()
-        rx_layout.addWidget(QLabel("Rotate X:"))
-        self.rx_slider = QSlider(Qt.Orientation.Horizontal)
-        self.rx_slider.setRange(-60, 60)
-        self.rx_slider.setValue(0)
-        rx_layout.addWidget(self.rx_slider)
-        self.rx_val = QLabel("0°")
-        self.rx_slider.valueChanged.connect(lambda v: self.rx_val.setText(f"{v}°"))
-        rx_layout.addWidget(self.rx_val)
-        layout.addLayout(rx_layout)
-        
-        # Rotation Y
-        ry_layout = QHBoxLayout()
-        ry_layout.addWidget(QLabel("Rotate Y:"))
-        self.ry_slider = QSlider(Qt.Orientation.Horizontal)
-        self.ry_slider.setRange(-60, 60)
-        self.ry_slider.setValue(0)
-        ry_layout.addWidget(self.ry_slider)
-        self.ry_val = QLabel("0°")
-        self.ry_slider.valueChanged.connect(lambda v: self.ry_val.setText(f"{v}°"))
-        ry_layout.addWidget(self.ry_val)
-        layout.addLayout(ry_layout)
-        
-        # Zoom
-        z_layout = QHBoxLayout()
-        z_layout.addWidget(QLabel("Zoom:"))
-        self.z_slider = QSlider(Qt.Orientation.Horizontal)
-        self.z_slider.setRange(50, 200)
-        self.z_slider.setValue(100)
-        z_layout.addWidget(self.z_slider)
-        self.z_val = QLabel("100%")
-        self.z_slider.valueChanged.connect(lambda v: self.z_val.setText(f"{v}%"))
-        z_layout.addWidget(self.z_val)
-        layout.addLayout(z_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "rotate_x": self.rx_slider.value(),
-            "rotate_y": self.ry_slider.value(),
-            "zoom": self.z_slider.value()
-        }
-
-
 class Rotate3DEffect(Effect):
     """3D Rotate / Zoom perspective transformation."""
     name = "3D Rotate / Zoom"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return Rotate3DDialog(parent)
+        controls = [
+            create_slider_control("rotate_x", "Rotate X:", 0, -60, 60),
+            create_slider_control("rotate_y", "Rotate Y:", 0, -60, 60),
+            create_slider_control("zoom", "Zoom:", 100, 50, 200),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         rotate_x = config.get("rotate_x", 0)
@@ -653,41 +431,16 @@ class Rotate3DEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class PolarInversionDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Polar Inversion")
-        layout = QVBoxLayout()
-        
-        # Amount
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(-100, 100)
-        self.a_slider.setValue(100)
-        a_layout.addWidget(self.a_slider)
-        self.a_val = QLabel("100")
-        self.a_slider.valueChanged.connect(lambda v: self.a_val.setText(str(v)))
-        a_layout.addWidget(self.a_val)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {"amount": self.a_slider.value()}
-
-
 class PolarInversionEffect(Effect):
     """Convert between rectangular and polar coordinates."""
     name = "Polar Inversion"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return PolarInversionDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 100, -100, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 100) / 100.0
@@ -727,41 +480,16 @@ class PolarInversionEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class FrostedGlassDialog(QDialog):
-    """Dialog for Frosted Glass effect."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Frosted Glass")
-        
-        layout = QVBoxLayout()
-        
-        # Amount (scatter radius)
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_spin = QSpinBox()
-        self.a_spin.setRange(1, 20)
-        self.a_spin.setValue(4)
-        a_layout.addWidget(self.a_spin)
-        layout.addLayout(a_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"amount": self.a_spin.value()}
-
-
 class FrostedGlassEffect(Effect):
     """Frosted/etched glass effect - randomly scatters pixels to create frosted appearance."""
     name = "Frosted Glass"
     category = "Distort"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return FrostedGlassDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 4, 1, 20),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 4)

@@ -1,17 +1,20 @@
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication
 from .tool import Tool
 
 
 class ColorPickerTool(Tool):
-    """Eyedropper tool - samples colors from the canvas."""
-    
+    """Eyedropper tool - samples colors from the canvas composite."""
+
     def __init__(self, document, session):
         super().__init__(document, session)
         self.name = "Color Picker"
-    
+
     def mouse_press(self, pos: QPoint):
-        self._sample_color(pos, is_secondary=False)
+        # Check for right-click to set secondary color
+        is_secondary = QApplication.mouseButtons() & Qt.MouseButton.RightButton
+        self._sample_color(pos, is_secondary=bool(is_secondary))
     
     def mouse_move(self, pos: QPoint):
         # Optionally show preview color while moving

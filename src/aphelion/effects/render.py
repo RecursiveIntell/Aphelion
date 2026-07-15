@@ -2,55 +2,27 @@
 Render and stylize effects for Aphelion - NumPy optimized.
 """
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QSpinBox
+from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage
 import numpy as np
 from scipy.ndimage import uniform_filter, sobel
-
-
-class GlowDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Glow")
-        
-        layout = QVBoxLayout()
-        
-        r_layout = QHBoxLayout()
-        r_layout.addWidget(QLabel("Radius:"))
-        self.r_spin = QSpinBox()
-        self.r_spin.setRange(1, 20)
-        self.r_spin.setValue(5)
-        r_layout.addWidget(self.r_spin)
-        layout.addLayout(r_layout)
-        
-        b_layout = QHBoxLayout()
-        b_layout.addWidget(QLabel("Brightness:"))
-        self.b_slider = QSlider(Qt.Orientation.Horizontal)
-        self.b_slider.setRange(0, 100)
-        self.b_slider.setValue(50)
-        b_layout.addWidget(self.b_slider)
-        layout.addLayout(b_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"radius": self.r_spin.value(), "brightness": self.b_slider.value()}
 
 
 class GlowEffect(Effect):
     """Soft glow effect - NumPy optimized."""
     name = "Glow"
     category = "Photo"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return GlowDialog(parent)
+        controls = [
+            create_slider_control("radius", "Radius:", 5, 1, 20),
+            create_slider_control("brightness", "Brightness:", 50, 0, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         radius = config.get("radius", 5)

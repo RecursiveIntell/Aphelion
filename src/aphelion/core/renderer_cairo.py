@@ -13,9 +13,13 @@ PIXEL FORMAT NOTES:
 """
 import cairo
 import numpy as np
+from functools import lru_cache
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtCore import QSize
 from typing import Dict, Optional, Tuple
+from .logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================
@@ -101,13 +105,53 @@ def cairo_surface_to_numpy(surface: cairo.ImageSurface) -> np.ndarray:
     return arr
 
 
+def qimage_alpha8_to_cairo_surface(img: QImage) -> cairo.ImageSurface:
+    """
+    Convert an Alpha8 QImage (mask) to a Cairo ImageSurface.
+
+    The alpha values become the alpha channel of an ARGB32 surface,
+    which can then be used for masking operations.
+
+    Args:
+        img: QImage in Format_Alpha8
+
+    Returns:
+        cairo.ImageSurface in FORMAT_ARGB32 where alpha channel = mask values
+    """
+    if img.format() != QImage.Format.Format_Alpha8:
+        img = img.convertToFormat(QImage.Format.Format_Alpha8)
+
+    width = img.width()
+    height = img.height()
+
+    # Get alpha values from mask
+    ptr = img.constBits()
+    stride = img.bytesPerLine()
+    alpha_arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, stride))
+    alpha_arr = alpha_arr[:, :width].copy()
+
+    # Create BGRA array with white color and mask alpha
+    bgra = np.zeros((height, width, 4), dtype=np.uint8)
+    bgra[:, :, 0] = 255  # B
+    bgra[:, :, 1] = 255  # G
+    bgra[:, :, 2] = 255  # R
+    bgra[:, :, 3] = alpha_arr  # A = mask values
+
+    # Premultiply alpha (white * alpha = alpha)
+    bgra[:, :, 0] = alpha_arr
+    bgra[:, :, 1] = alpha_arr
+    bgra[:, :, 2] = alpha_arr
+
+    return numpy_to_cairo_surface(bgra)
+
+
 def qimage_to_cairo_surface(img: QImage) -> cairo.ImageSurface:
     """
     Convert a QImage to a Cairo ImageSurface.
-    
+
     Args:
         img: QImage, will be converted to ARGB32_Premultiplied if needed
-        
+
     Returns:
         cairo.ImageSurface in FORMAT_ARGB32
     """
@@ -187,49 +231,70 @@ def _get_qt_mode_value(mode) -> int:
     return int(mode)
 
 
+@lru_cache(maxsize=32)
 def _qt_blend_to_cairo(qt_mode) -> Tuple[cairo.Operator, bool]:
     """
     Convert Qt CompositionMode to Cairo Operator.
-    
+
     Returns:
         Tuple of (operator, needs_fallback)
         If needs_fallback is True, use CPU compositing instead.
     """
     from PySide6.QtGui import QPainter
-    
-    # Common modes Cairo supports directly
-    mode_mapping = {
-        QPainter.CompositionMode.CompositionMode_SourceOver: (cairo.OPERATOR_OVER, False),
-        QPainter.CompositionMode.CompositionMode_DestinationOver: (cairo.OPERATOR_DEST_OVER, False),
-        QPainter.CompositionMode.CompositionMode_Clear: (cairo.OPERATOR_CLEAR, False),
-        QPainter.CompositionMode.CompositionMode_Source: (cairo.OPERATOR_SOURCE, False),
-        QPainter.CompositionMode.CompositionMode_Destination: (cairo.OPERATOR_DEST, False),
-        QPainter.CompositionMode.CompositionMode_SourceIn: (cairo.OPERATOR_IN, False),
-        QPainter.CompositionMode.CompositionMode_DestinationIn: (cairo.OPERATOR_DEST_IN, False),
-        QPainter.CompositionMode.CompositionMode_SourceOut: (cairo.OPERATOR_OUT, False),
-        QPainter.CompositionMode.CompositionMode_DestinationOut: (cairo.OPERATOR_DEST_OUT, False),
-        QPainter.CompositionMode.CompositionMode_SourceAtop: (cairo.OPERATOR_ATOP, False),
-        QPainter.CompositionMode.CompositionMode_DestinationAtop: (cairo.OPERATOR_DEST_ATOP, False),
-        QPainter.CompositionMode.CompositionMode_Xor: (cairo.OPERATOR_XOR, False),
-        QPainter.CompositionMode.CompositionMode_Plus: (cairo.OPERATOR_ADD, False),
-        QPainter.CompositionMode.CompositionMode_Multiply: (cairo.OPERATOR_MULTIPLY, False),
-        QPainter.CompositionMode.CompositionMode_Screen: (cairo.OPERATOR_SCREEN, False),
-        QPainter.CompositionMode.CompositionMode_Overlay: (cairo.OPERATOR_OVERLAY, False),
-        QPainter.CompositionMode.CompositionMode_Darken: (cairo.OPERATOR_DARKEN, False),
-        QPainter.CompositionMode.CompositionMode_Lighten: (cairo.OPERATOR_LIGHTEN, False),
-        QPainter.CompositionMode.CompositionMode_ColorDodge: (cairo.OPERATOR_COLOR_DODGE, False),
-        QPainter.CompositionMode.CompositionMode_ColorBurn: (cairo.OPERATOR_COLOR_BURN, False),
-        QPainter.CompositionMode.CompositionMode_HardLight: (cairo.OPERATOR_HARD_LIGHT, False),
-        QPainter.CompositionMode.CompositionMode_SoftLight: (cairo.OPERATOR_SOFT_LIGHT, False),
-        QPainter.CompositionMode.CompositionMode_Difference: (cairo.OPERATOR_DIFFERENCE, False),
-        QPainter.CompositionMode.CompositionMode_Exclusion: (cairo.OPERATOR_EXCLUSION, False),
-    }
-    
-    if qt_mode in mode_mapping:
-        return mode_mapping[qt_mode]
-    
-    # Default fallback: use OVER (Normal blend)
-    return (cairo.OPERATOR_OVER, False)
+
+    # Use match/case for clearer control flow
+    match qt_mode:
+        case QPainter.CompositionMode.CompositionMode_SourceOver:
+            return (cairo.OPERATOR_OVER, False)
+        case QPainter.CompositionMode.CompositionMode_DestinationOver:
+            return (cairo.OPERATOR_DEST_OVER, False)
+        case QPainter.CompositionMode.CompositionMode_Clear:
+            return (cairo.OPERATOR_CLEAR, False)
+        case QPainter.CompositionMode.CompositionMode_Source:
+            return (cairo.OPERATOR_SOURCE, False)
+        case QPainter.CompositionMode.CompositionMode_Destination:
+            return (cairo.OPERATOR_DEST, False)
+        case QPainter.CompositionMode.CompositionMode_SourceIn:
+            return (cairo.OPERATOR_IN, False)
+        case QPainter.CompositionMode.CompositionMode_DestinationIn:
+            return (cairo.OPERATOR_DEST_IN, False)
+        case QPainter.CompositionMode.CompositionMode_SourceOut:
+            return (cairo.OPERATOR_OUT, False)
+        case QPainter.CompositionMode.CompositionMode_DestinationOut:
+            return (cairo.OPERATOR_DEST_OUT, False)
+        case QPainter.CompositionMode.CompositionMode_SourceAtop:
+            return (cairo.OPERATOR_ATOP, False)
+        case QPainter.CompositionMode.CompositionMode_DestinationAtop:
+            return (cairo.OPERATOR_DEST_ATOP, False)
+        case QPainter.CompositionMode.CompositionMode_Xor:
+            return (cairo.OPERATOR_XOR, False)
+        case QPainter.CompositionMode.CompositionMode_Plus:
+            return (cairo.OPERATOR_ADD, False)
+        case QPainter.CompositionMode.CompositionMode_Multiply:
+            return (cairo.OPERATOR_MULTIPLY, False)
+        case QPainter.CompositionMode.CompositionMode_Screen:
+            return (cairo.OPERATOR_SCREEN, False)
+        case QPainter.CompositionMode.CompositionMode_Overlay:
+            return (cairo.OPERATOR_OVERLAY, False)
+        case QPainter.CompositionMode.CompositionMode_Darken:
+            return (cairo.OPERATOR_DARKEN, False)
+        case QPainter.CompositionMode.CompositionMode_Lighten:
+            return (cairo.OPERATOR_LIGHTEN, False)
+        case QPainter.CompositionMode.CompositionMode_ColorDodge:
+            return (cairo.OPERATOR_COLOR_DODGE, False)
+        case QPainter.CompositionMode.CompositionMode_ColorBurn:
+            return (cairo.OPERATOR_COLOR_BURN, False)
+        case QPainter.CompositionMode.CompositionMode_HardLight:
+            return (cairo.OPERATOR_HARD_LIGHT, False)
+        case QPainter.CompositionMode.CompositionMode_SoftLight:
+            return (cairo.OPERATOR_SOFT_LIGHT, False)
+        case QPainter.CompositionMode.CompositionMode_Difference:
+            return (cairo.OPERATOR_DIFFERENCE, False)
+        case QPainter.CompositionMode.CompositionMode_Exclusion:
+            return (cairo.OPERATOR_EXCLUSION, False)
+        case _:
+            # Default fallback: use OVER (Normal blend)
+            return (cairo.OPERATOR_OVER, False)
 
 
 # =============================================================================
@@ -347,31 +412,35 @@ class CairoRenderer:
     def _apply_mask(self, layer_surface: cairo.ImageSurface, mask: QImage) -> cairo.ImageSurface:
         """
         Apply a mask to a layer surface.
-        
+
         Args:
             layer_surface: The layer's Cairo surface
             mask: QImage mask (Format_Alpha8)
-            
+
         Returns:
             New Cairo surface with mask applied
         """
         width = layer_surface.get_width()
         height = layer_surface.get_height()
-        
+
         # Create output surface
         output = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         ctx = cairo.Context(output)
-        
+
         # Draw layer
         ctx.set_source_surface(layer_surface, 0, 0)
         ctx.paint()
-        
+
         # Apply mask using DestinationIn
-        mask_surface = qimage_to_cairo_surface(mask)
+        # Use Alpha8-specific conversion for masks
+        if mask.format() == QImage.Format.Format_Alpha8:
+            mask_surface = qimage_alpha8_to_cairo_surface(mask)
+        else:
+            mask_surface = qimage_to_cairo_surface(mask)
         ctx.set_operator(cairo.OPERATOR_DEST_IN)
         ctx.set_source_surface(mask_surface, 0, 0)
         ctx.paint()
-        
+
         return output
     
     def _apply_adjustment_layer(self, surface: cairo.ImageSurface, layer):
@@ -405,7 +474,7 @@ class CairoRenderer:
             surface.mark_dirty()
             
         except Exception as e:
-            print(f"Error applying adjustment layer {layer.name}: {e}")
+            logger.error(f"Error applying adjustment layer {layer.name}: {e}", exc_info=True)
     
     def render_to_qimage(self, document, view_state=None) -> QImage:
         """

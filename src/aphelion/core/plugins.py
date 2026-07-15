@@ -7,6 +7,10 @@ from abc import ABC, abstractmethod
 
 from enum import Enum, auto
 from ..core.settings import SettingsManager
+from ..core.logging import get_logger
+from .plugin_api import EnhancedPlugin, validate_plugin, PluginCapability
+
+logger = get_logger(__name__)
 
 class PluginType(Enum):
     EFFECT = auto()
@@ -89,17 +93,32 @@ class PluginManager:
                         attr is not AphelionPlugin):
                         
                         plugin_instance = attr()
-                        
-                        if disabled_list and plugin_instance.name in disabled_list:
-                            print(f"Skipping disabled plugin: {plugin_instance.name}")
+
+                        # Check if disabled (support both old and new API)
+                        plugin_name = getattr(plugin_instance, 'name',
+                                            getattr(getattr(plugin_instance, 'metadata', None), 'name', None))
+
+                        if disabled_list and plugin_name and plugin_name in disabled_list:
+                            logger.info(f"Skipping disabled plugin: {plugin_name}")
                             continue
-                            
+
+                        # Validate new API plugins
+                        if isinstance(plugin_instance, EnhancedPlugin):
+                            is_valid, error = validate_plugin(plugin_instance)
+                            if not is_valid:
+                                logger.error(f"Invalid plugin {plugin_name}: {error}")
+                                continue
+                            logger.info(f"Validated enhanced plugin: {plugin_instance.metadata.name} v{plugin_instance.metadata.version}")
+
                         self._initialize_plugin(plugin_instance)
                         self.plugins.append(plugin_instance)
-                        print(f"Loaded plugin: {plugin_instance.name}")
-                        
+
+                        version = getattr(plugin_instance, 'version',
+                                        getattr(getattr(plugin_instance, 'metadata', None), 'version', 'unknown'))
+                        logger.info(f"Loaded plugin: {plugin_name} v{version}")
+
         except Exception as e:
-            print(f"Failed to load plugin {filepath}: {e}")
+            logger.error(f"Failed to load plugin {filepath}: {e}", exc_info=True)
 
     def _initialize_plugin(self, plugin: AphelionPlugin):
         # Context creation
@@ -107,13 +126,13 @@ class PluginManager:
         
         context = {
             "EffectRegistry": EffectRegistry,
-            "register_tool": self.context.get("register_tool", lambda *a: print("Tool reg not avail")),
+            "register_tool": self.context.get("register_tool", lambda *a: logger.warning("Tool registration not available")),
             # Add more as needed
         }
         try:
             plugin.initialize(context)
         except Exception as e:
-             print(f"Error initializing plugin {plugin.name}: {e}")
+             logger.error(f"Error initializing plugin {plugin.name}: {e}", exc_info=True)
 
     def get_loaded_plugins(self) -> List[AphelionPlugin]:
         return self.plugins

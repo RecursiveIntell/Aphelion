@@ -106,38 +106,38 @@ class Document(QObject):
         # Do it
         prop_cmd.execute()
         
-        # Calculate offset
-        dx, dy = 0, 0
-        if anchor == Qt.AlignCenter:
-            dx = (width - old_size_w) // 2
-            dy = (height - old_size_h) // 2
-        elif anchor == Qt.AlignTop | Qt.AlignLeft:
-            dx = 0
-            dy = 0
-        elif anchor == Qt.AlignTop | Qt.AlignHCenter:
-            dx = (width - old_size_w) // 2
-            dy = 0
-        elif anchor == Qt.AlignTop | Qt.AlignRight:
-            dx = width - old_size_w
-            dy = 0
-        elif anchor == Qt.AlignVCenter | Qt.AlignLeft:
-            dx = 0
-            dy = (height - old_size_h) // 2
-        elif anchor == Qt.AlignVCenter | Qt.AlignRight:
-            dx = width - old_size_w
-            dy = (height - old_size_h) // 2
-        elif anchor == Qt.AlignBottom | Qt.AlignLeft:
-            dx = 0
-            dy = height - old_size_h
-        elif anchor == Qt.AlignBottom | Qt.AlignHCenter:
-            dx = (width - old_size_w) // 2
-            dy = height - old_size_h
-        elif anchor == Qt.AlignBottom | Qt.AlignRight:
-            dx = width - old_size_w
-            dy = height - old_size_h
-        else: # Default center
-            dx = (width - old_size_w) // 2
-            dy = (height - old_size_h) // 2
+        # Calculate offset using match/case
+        match anchor:
+            case Qt.AlignCenter:
+                dx = (width - old_size_w) // 2
+                dy = (height - old_size_h) // 2
+            case Qt.AlignTop | Qt.AlignLeft:
+                dx = 0
+                dy = 0
+            case Qt.AlignTop | Qt.AlignHCenter:
+                dx = (width - old_size_w) // 2
+                dy = 0
+            case Qt.AlignTop | Qt.AlignRight:
+                dx = width - old_size_w
+                dy = 0
+            case Qt.AlignVCenter | Qt.AlignLeft:
+                dx = 0
+                dy = (height - old_size_h) // 2
+            case Qt.AlignVCenter | Qt.AlignRight:
+                dx = width - old_size_w
+                dy = (height - old_size_h) // 2
+            case Qt.AlignBottom | Qt.AlignLeft:
+                dx = 0
+                dy = height - old_size_h
+            case Qt.AlignBottom | Qt.AlignHCenter:
+                dx = (width - old_size_w) // 2
+                dy = height - old_size_h
+            case Qt.AlignBottom | Qt.AlignRight:
+                dx = width - old_size_w
+                dy = height - old_size_h
+            case _:  # Default center
+                dx = (width - old_size_w) // 2
+                dy = (height - old_size_h) // 2
         
         # Resize Layers (Crop/Expand)
         for layer in self.layers:
@@ -502,11 +502,13 @@ class Document(QObject):
         cmd.execute()
 
     def move_layer(self, from_index: int, to_index: int):
-        if from_index == to_index: 
+        if from_index == to_index:
             return
         if not (0 <= from_index < len(self.layers) and 0 <= to_index < len(self.layers)):
             return
-            
-        command = LayerStructureCommand(self, "move", index=to_index, previous_index=from_index)
+
+        # Store the layer reference for safer undo/redo
+        layer = self.layers[from_index]
+        command = LayerStructureCommand(self, "move", layer=layer, index=to_index, previous_index=from_index)
         self.history.push(command)
         command.execute()

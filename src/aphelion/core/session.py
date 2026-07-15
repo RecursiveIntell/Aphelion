@@ -86,13 +86,27 @@ class Session(QObject):
             
     # Edit Target: "image" or "mask"
     edit_target_changed = Signal(str)
-    
+
     @property
     def edit_target(self):
         return getattr(self, "_edit_target", "image")
-        
+
     @edit_target.setter
     def edit_target(self, target: str):
         if self.edit_target != target:
             self._edit_target = target
             self.edit_target_changed.emit(target)
+
+    # Tolerance for selection tools (Magic Wand, Paint Bucket)
+    tolerance_changed = Signal(int)
+
+    @property
+    def tolerance(self):
+        return getattr(self, "_tolerance", 32)
+
+    @tolerance.setter
+    def tolerance(self, value: int):
+        value = max(0, min(255, value))  # Clamp to valid range
+        if self.tolerance != value:
+            self._tolerance = value
+            self.tolerance_changed.emit(value)

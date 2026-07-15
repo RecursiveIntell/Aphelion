@@ -4,12 +4,14 @@ Photo and artistic effects for Aphelion.
 Optimized with NumPy for high-performance image processing.
 """
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QSlider, QDialogButtonBox, QSpinBox, QWidget,
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                               QSpinBox, QWidget,
                                QComboBox, QCheckBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush
 from ..core.effects import Effect
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage, apply_lut
 import numpy as np
 import math
@@ -294,51 +296,16 @@ class LevelsEffect(Effect):
 
 # ----------------- Vignette Effect -----------------
 
-class VignetteDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Vignette")
-        
-        layout = QVBoxLayout()
-        
-        # Amount
-        a_layout = QHBoxLayout()
-        a_layout.addWidget(QLabel("Amount:"))
-        self.a_slider = QSlider(Qt.Orientation.Horizontal)
-        self.a_slider.setRange(0, 100)
-        self.a_slider.setValue(50)
-        a_layout.addWidget(self.a_slider)
-        layout.addLayout(a_layout)
-        
-        # Softness
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Softness:"))
-        self.s_slider = QSlider(Qt.Orientation.Horizontal)
-        self.s_slider.setRange(0, 100)
-        self.s_slider.setValue(50)
-        s_layout.addWidget(self.s_slider)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {
-            "amount": self.a_slider.value(),
-            "softness": self.s_slider.value()
-        }
-
-
 class VignetteEffect(Effect):
     name = "Vignette"
     category = "Photo"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return VignetteDialog(parent)
+        controls = [
+            create_slider_control("amount", "Amount:", 50, 0, 100),
+            create_slider_control("softness", "Softness:", 50, 0, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         amount = config.get("amount", 50) / 100.0
@@ -368,50 +335,17 @@ class VignetteEffect(Effect):
 
 # ----------------- Oil Painting Effect -----------------
 
-class OilPaintingDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Oil Painting")
-        
-        layout = QVBoxLayout()
-        
-        r_layout = QHBoxLayout()
-        r_layout.addWidget(QLabel("Radius:"))
-        self.r_spin = QSpinBox()
-        self.r_spin.setRange(1, 10)
-        self.r_spin.setValue(3)
-        r_layout.addWidget(self.r_spin)
-        layout.addLayout(r_layout)
-        
-        i_layout = QHBoxLayout()
-        i_layout.addWidget(QLabel("Intensity:"))
-        self.i_spin = QSpinBox()
-        self.i_spin.setRange(5, 50)
-        self.i_spin.setValue(20)
-        i_layout.addWidget(self.i_spin)
-        layout.addLayout(i_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {
-            "radius": self.r_spin.value(),
-            "intensity": self.i_spin.value()
-        }
-
-
 class OilPaintingEffect(Effect):
     """Oil painting effect using intensity binning."""
     name = "Oil Painting"
     category = "Artistic"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return OilPaintingDialog(parent)
+        controls = [
+            create_slider_control("radius", "Radius:", 3, 1, 10),
+            create_slider_control("intensity", "Intensity:", 20, 5, 50),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         radius = config.get("radius", 3)
@@ -462,38 +396,15 @@ class OilPaintingEffect(Effect):
 
 # ----------------- Posterize Effect -----------------
 
-class PosterizeDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Posterize")
-        
-        layout = QVBoxLayout()
-        
-        l_layout = QHBoxLayout()
-        l_layout.addWidget(QLabel("Levels:"))
-        self.l_spin = QSpinBox()
-        self.l_spin.setRange(2, 32)
-        self.l_spin.setValue(4)
-        l_layout.addWidget(self.l_spin)
-        layout.addLayout(l_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {"levels": self.l_spin.value()}
-
-
 class PosterizeEffect(Effect):
     name = "Posterize"
     category = "Adjustments"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return PosterizeDialog(parent)
+        controls = [
+            create_slider_control("levels", "Levels:", 4, 2, 32),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         levels = config.get("levels", 4)
@@ -534,50 +445,17 @@ class BlackWhiteEffect(Effect):
 
 # ----------------- Red Eye Removal Effect -----------------
 
-class RedEyeDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Red Eye Removal")
-        
-        layout = QVBoxLayout()
-        
-        t_layout = QHBoxLayout()
-        t_layout.addWidget(QLabel("Tolerance:"))
-        self.t_slider = QSlider(Qt.Orientation.Horizontal)
-        self.t_slider.setRange(10, 100)
-        self.t_slider.setValue(50)
-        t_layout.addWidget(self.t_slider)
-        layout.addLayout(t_layout)
-        
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Saturation:"))
-        self.s_slider = QSlider(Qt.Orientation.Horizontal)
-        self.s_slider.setRange(10, 100)
-        self.s_slider.setValue(70)
-        s_layout.addWidget(self.s_slider)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {
-            "tolerance": self.t_slider.value(),
-            "saturation": self.s_slider.value()
-        }
-
-
 class RedEyeRemovalEffect(Effect):
     """Red eye removal - detects and desaturates red pixels."""
     name = "Red Eye Removal"
     category = "Photo"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return RedEyeDialog(parent)
+        controls = [
+            create_slider_control("tolerance", "Tolerance:", 50, 10, 100),
+            create_slider_control("saturation", "Saturation:", 70, 10, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         tolerance = config.get("tolerance", 50) / 100.0
@@ -616,50 +494,17 @@ class RedEyeRemovalEffect(Effect):
 
 # ----------------- Surface Blur Effect -----------------
 
-class SurfaceBlurDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Surface Blur")
-        
-        layout = QVBoxLayout()
-        
-        r_layout = QHBoxLayout()
-        r_layout.addWidget(QLabel("Radius:"))
-        self.r_spin = QSpinBox()
-        self.r_spin.setRange(1, 10)
-        self.r_spin.setValue(3)
-        r_layout.addWidget(self.r_spin)
-        layout.addLayout(r_layout)
-        
-        t_layout = QHBoxLayout()
-        t_layout.addWidget(QLabel("Threshold:"))
-        self.t_slider = QSlider(Qt.Orientation.Horizontal)
-        self.t_slider.setRange(5, 100)
-        self.t_slider.setValue(30)
-        t_layout.addWidget(self.t_slider)
-        layout.addLayout(t_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-    
-    def get_config(self):
-        return {
-            "radius": self.r_spin.value(),
-            "threshold": self.t_slider.value()
-        }
-
-
 class SurfaceBlurEffect(Effect):
     """Surface blur - edge-preserving blur."""
     name = "Surface Blur"
     category = "Blurs"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return SurfaceBlurDialog(parent)
+        controls = [
+            create_slider_control("radius", "Radius:", 3, 1, 10),
+            create_slider_control("threshold", "Threshold:", 30, 5, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         radius = config.get("radius", 3)

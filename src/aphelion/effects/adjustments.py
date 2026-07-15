@@ -4,10 +4,12 @@ Adjustment effects for Aphelion.
 Optimized with NumPy for high-performance LUT-based transformations.
 """
 from PySide6.QtGui import QImage, QColor, qRgb
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QDialogButtonBox, QWidget
+from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt
 from ..core.effects import Effect
 from ..utils.image_processing import qimage_to_numpy, numpy_to_qimage, apply_lut
+from ..ui.dialogs import ConfigDialog
+from ..ui.dialogs.controls import create_slider_control
 import numpy as np
 
 
@@ -23,57 +25,16 @@ class InvertEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class BrightnessContrastDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Brightness / Contrast")
-        
-        layout = QVBoxLayout()
-        
-        # Brightness
-        b_layout = QHBoxLayout()
-        b_layout.addWidget(QLabel("Brightness:"))
-        self.b_slider = QSlider(Qt.Orientation.Horizontal)
-        self.b_slider.setRange(-100, 100)
-        self.b_slider.setValue(0)
-        b_layout.addWidget(self.b_slider)
-        self.b_val = QLabel("0")
-        self.b_slider.valueChanged.connect(lambda v: self.b_val.setText(str(v)))
-        b_layout.addWidget(self.b_val)
-        layout.addLayout(b_layout)
-        
-        # Contrast
-        c_layout = QHBoxLayout()
-        c_layout.addWidget(QLabel("Contrast:"))
-        self.c_slider = QSlider(Qt.Orientation.Horizontal)
-        self.c_slider.setRange(-100, 100)
-        self.c_slider.setValue(0)
-        c_layout.addWidget(self.c_slider)
-        self.c_val = QLabel("0")
-        self.c_slider.valueChanged.connect(lambda v: self.c_val.setText(str(v)))
-        c_layout.addWidget(self.c_val)
-        layout.addLayout(c_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "brightness": self.b_slider.value(),
-            "contrast": self.c_slider.value()
-        }
-
-
 class BrightnessContrastEffect(Effect):
     name = "Brightness / Contrast"
     category = "Adjustments"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return BrightnessContrastDialog(parent)
+        controls = [
+            create_slider_control("brightness", "Brightness:", 0, -100, 100),
+            create_slider_control("contrast", "Contrast:", 0, -100, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
 
     def apply(self, image: QImage, config: dict) -> QImage:
         brightness = config.get("brightness", 0)
@@ -98,55 +59,16 @@ class BrightnessContrastEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class HueSaturationDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Hue / Saturation")
-        layout = QVBoxLayout()
-        
-        # Hue
-        h_layout = QHBoxLayout()
-        h_layout.addWidget(QLabel("Hue:"))
-        self.h_slider = QSlider(Qt.Orientation.Horizontal)
-        self.h_slider.setRange(-180, 180)
-        self.h_slider.setValue(0)
-        h_layout.addWidget(self.h_slider)
-        self.h_val = QLabel("0")
-        self.h_slider.valueChanged.connect(lambda v: self.h_val.setText(str(v)))
-        h_layout.addWidget(self.h_val)
-        layout.addLayout(h_layout)
-        
-        # Saturation
-        s_layout = QHBoxLayout()
-        s_layout.addWidget(QLabel("Saturation:"))
-        self.s_slider = QSlider(Qt.Orientation.Horizontal)
-        self.s_slider.setRange(-100, 100)
-        self.s_slider.setValue(0)
-        s_layout.addWidget(self.s_slider)
-        self.s_val = QLabel("0")
-        self.s_slider.valueChanged.connect(lambda v: self.s_val.setText(str(v)))
-        s_layout.addWidget(self.s_val)
-        layout.addLayout(s_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "hue": self.h_slider.value(),
-            "saturation": self.s_slider.value()
-        }
-
-
 class HueSaturationEffect(Effect):
     name = "Hue / Saturation"
     category = "Adjustments"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return HueSaturationDialog(parent)
+        controls = [
+            create_slider_control("hue", "Hue:", 0, -180, 180),
+            create_slider_control("saturation", "Saturation:", 0, -100, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
         
     def apply(self, image: QImage, config: dict) -> QImage:
         hue_shift = config.get("hue", 0)
@@ -266,72 +188,18 @@ class InvertAlphaEffect(Effect):
         return numpy_to_qimage(result)
 
 
-class ColorBalanceDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Color Balance")
-        layout = QVBoxLayout()
-        
-        # Cyan-Red
-        cr_layout = QHBoxLayout()
-        cr_layout.addWidget(QLabel("Cyan"))
-        self.cr_slider = QSlider(Qt.Orientation.Horizontal)
-        self.cr_slider.setRange(-100, 100)
-        self.cr_slider.setValue(0)
-        cr_layout.addWidget(self.cr_slider)
-        cr_layout.addWidget(QLabel("Red"))
-        self.cr_val = QLabel("0")
-        self.cr_slider.valueChanged.connect(lambda v: self.cr_val.setText(str(v)))
-        cr_layout.addWidget(self.cr_val)
-        layout.addLayout(cr_layout)
-        
-        # Magenta-Green
-        mg_layout = QHBoxLayout()
-        mg_layout.addWidget(QLabel("Magenta"))
-        self.mg_slider = QSlider(Qt.Orientation.Horizontal)
-        self.mg_slider.setRange(-100, 100)
-        self.mg_slider.setValue(0)
-        mg_layout.addWidget(self.mg_slider)
-        mg_layout.addWidget(QLabel("Green"))
-        self.mg_val = QLabel("0")
-        self.mg_slider.valueChanged.connect(lambda v: self.mg_val.setText(str(v)))
-        mg_layout.addWidget(self.mg_val)
-        layout.addLayout(mg_layout)
-        
-        # Yellow-Blue
-        yb_layout = QHBoxLayout()
-        yb_layout.addWidget(QLabel("Yellow"))
-        self.yb_slider = QSlider(Qt.Orientation.Horizontal)
-        self.yb_slider.setRange(-100, 100)
-        self.yb_slider.setValue(0)
-        yb_layout.addWidget(self.yb_slider)
-        yb_layout.addWidget(QLabel("Blue"))
-        self.yb_val = QLabel("0")
-        self.yb_slider.valueChanged.connect(lambda v: self.yb_val.setText(str(v)))
-        yb_layout.addWidget(self.yb_val)
-        layout.addLayout(yb_layout)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-        
-    def get_config(self):
-        return {
-            "cyan_red": self.cr_slider.value(),
-            "magenta_green": self.mg_slider.value(),
-            "yellow_blue": self.yb_slider.value()
-        }
-
-
 class ColorBalanceEffect(Effect):
     """Adjust color balance between complementary color pairs."""
     name = "Color Balance"
     category = "Adjustments"
-    
+
     def create_dialog(self, parent) -> QDialog:
-        return ColorBalanceDialog(parent)
+        controls = [
+            create_slider_control("cyan_red", "Cyan / Red:", 0, -100, 100),
+            create_slider_control("magenta_green", "Magenta / Green:", 0, -100, 100),
+            create_slider_control("yellow_blue", "Yellow / Blue:", 0, -100, 100),
+        ]
+        return ConfigDialog(self.name, controls, parent)
     
     def apply(self, image: QImage, config: dict) -> QImage:
         cyan_red = config.get("cyan_red", 0)

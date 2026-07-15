@@ -1,19 +1,25 @@
+from dataclasses import dataclass, field
+from typing import Final, Optional
 from PySide6.QtGui import QImage, QPainter, QColor
 import uuid
 
+@dataclass(slots=True)
 class Layer:
-    def __init__(self, width: int, height: int, name: str = "New Layer"):
-        self.id = str(uuid.uuid4())
-        self.name = name
-        self.visible = True
-        self.opacity = 1.0
-        self.blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
-        
+    width: int
+    height: int
+    name: str = "New Layer"
+    id: Final[str] = field(default_factory=lambda: str(uuid.uuid4()))
+    visible: bool = True
+    opacity: float = 1.0
+    blend_mode: QPainter.CompositionMode = QPainter.CompositionMode.CompositionMode_SourceOver
+    image: QImage = field(init=False)
+    mask: Optional[QImage] = None
+    is_adjustment: bool = False
+
+    def __post_init__(self):
         # Initialize transparent image
-        self.image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        self.image = QImage(self.width, self.height, QImage.Format.Format_ARGB32_Premultiplied)
         self.image.fill(QColor(0, 0, 0, 0))
-        self.mask = None # QImage(Format_Alpha8)
-        self.is_adjustment = False
 
     def clear(self):
         self.image.fill(QColor(0, 0, 0, 0))

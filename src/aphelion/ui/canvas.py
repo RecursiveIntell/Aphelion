@@ -21,7 +21,6 @@ class CanvasWidget(QWidget):
         
         # Subscribe to document changes to trigger repaints
         self.document.content_changed.connect(self.update)
-        self.document.content_changed.connect(self.update)
         self.document.active_layer_changed.connect(lambda l: self.update())
         self.document.selection_changed.connect(self._on_selection_changed)
         
@@ -30,8 +29,6 @@ class CanvasWidget(QWidget):
         # Create checkerboard pattern
         self.checker_brush = self._create_checkerboard_brush()
 
-        # Transient layer for tools (e.g. brush preview)
-        # Tools will write to this, and we composite it last.
         # Transient layer for tools (e.g. brush preview)
         # Tools will write to this, and we composite it last.
         self.transient_layer = None 
@@ -201,7 +198,6 @@ class CanvasWidget(QWidget):
         # X - Swap colors (Paint.NET style)
         if event.key() == Qt.Key.Key_X and not event.modifiers():
             if self.session:
-                print("DEBUG: X pressed in canvas - swapping colors!")
                 self.session.swap_colors()
                 event.accept()
                 return
