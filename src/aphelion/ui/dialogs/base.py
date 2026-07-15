@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QPushButton, QComboBox, QDialogButtonBox, QGroupBox, QGridLayout, QButtonGroup
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QPushButton, QComboBox, QDialogButtonBox, QGroupBox, QGridLayout, QButtonGroup, QCheckBox
 from PySide6.QtCore import Qt
 
 class ResizeDialog(QDialog):
@@ -8,6 +8,7 @@ class ResizeDialog(QDialog):
         
         self.width_val = width
         self.height_val = height
+        self.aspect_ratio = width / height if height > 0 else 1.0
         
         layout = QVBoxLayout()
         
@@ -32,7 +33,12 @@ class ResizeDialog(QDialog):
         layout.addLayout(h_layout)
         
         # Aspect Ratio
-        # TODO: Add specific aspect ratio lock UI
+        self.check_ratio = QCheckBox("Lock Aspect Ratio")
+        self.check_ratio.toggled.connect(self.on_ratio_toggled)
+        layout.addWidget(self.check_ratio)
+
+        self.spin_width.valueChanged.connect(self.on_width_changed)
+        self.spin_height.valueChanged.connect(self.on_height_changed)
         
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -42,6 +48,30 @@ class ResizeDialog(QDialog):
         
         self.setLayout(layout)
         
+    def on_ratio_toggled(self, checked):
+        if checked:
+            w = self.spin_width.value()
+            h = self.spin_height.value()
+            if h > 0:
+                self.aspect_ratio = w / h
+
+    def on_width_changed(self, value):
+        if self.check_ratio.isChecked():
+            if self.aspect_ratio != 0:
+                new_height = int(value / self.aspect_ratio)
+            else:
+                new_height = 0
+            self.spin_height.blockSignals(True)
+            self.spin_height.setValue(new_height)
+            self.spin_height.blockSignals(False)
+
+    def on_height_changed(self, value):
+        if self.check_ratio.isChecked():
+            new_width = int(value * self.aspect_ratio)
+            self.spin_width.blockSignals(True)
+            self.spin_width.setValue(new_width)
+            self.spin_width.blockSignals(False)
+
     def get_values(self):
         return self.spin_width.value(), self.spin_height.value()
 

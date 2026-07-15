@@ -16,6 +16,7 @@ class Document(QObject):
     layer_removed = Signal(str) # Layer ID
     active_layer_changed = Signal(object) # Layer object
     content_changed = Signal() # Helper for simple redraw requests
+    overlay_changed = Signal() # Request update for tool overlays only
     selection_changed = Signal()
 
     def __init__(self, width: int, height: int):
