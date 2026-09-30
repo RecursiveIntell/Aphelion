@@ -1,10 +1,10 @@
 # Aphelion Image Editor
 
-**Aphelion** is a professional, layer-based image editor for Linux, built with Python and PySide6. It provides Paint.NET-like functionality with **49 image effects**, **21 tools**, and extensive file format support.
+**Aphelion** is a layer-based image editor for Linux, built with Python and PySide6. It includes drawing and selection tools, image effects, Cairo compositing, and a layered project format. The package version is maintained in [pyproject.toml](pyproject.toml).
 
 ## ✨ Features
 
-### 🎨 Tools (21)
+### 🎨 Tools
 | Category | Tools |
 |----------|-------|
 | **Selection** | Rectangle, Ellipse, Lasso, Magic Wand |
@@ -14,7 +14,7 @@
 | **Retouching** | Clone Stamp, Recolor |
 | **Utility** | Text, Color Picker, Zoom, Move Selected Pixels |
 
-### 🖼️ Effects (49)
+### 🖼️ Effects
 | Category | Effects |
 |----------|---------|
 | **Adjustments** | Invert, Invert Alpha, Brightness/Contrast, Hue/Saturation, Auto Level, Sepia, Curves, Levels, Posterize, Black & White, **Color Balance** |
@@ -32,10 +32,10 @@
 - **Project**: `.aphelion` (non-destructive layer preservation)
 
 ### 🎭 Additional Features
-- **Layer System**: Unlimited layers with blend modes, opacity, and masks.
+- **Layer System**: Layers with blend modes, opacity, and masks. Practical document size depends on available memory.
 - **Visual Thumbnails**: Real-time layer previews.
 - **Selection Tools**: Advance operations like **Feather**, **Expand**, **Contract**, Invert.
-- **Undo/Redo**: Full history with visual timeline.
+- **Undo/Redo**: Command history with a visual timeline and a default 500 MiB memory budget; older undo entries can be evicted.
 - **Plugin System**: Extend with Python scripts.
 - **Themes**: Light and Dark mode.
 - **Image Strip**: Paint.NET-style open document thumbnails.
@@ -52,14 +52,17 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-pip install PySide6 numpy scipy pycairo
+python -m pip install -e .
 
-# Run
-./run.sh
-# OR
-export PYTHONPATH=src
-python3 -m aphelion
+# Run the installed entry point
+aphelion
+# Or run from the source checkout
+PYTHONPATH=src python -m aphelion
 ```
+
+The optional `run.sh` launcher expects an environment named `venv` and forces Qt's `xcb` backend, so it needs an X11/XWayland session. The commands above avoid that launcher-specific requirement.
+
+Raster format availability also depends on the Qt image plugins installed on the host. Save a layered `.aphelion` copy before exporting a flattened image.
 
 ## 🔌 Plugin Development
 
@@ -69,7 +72,7 @@ Aphelion supports plugins for adding custom effects and tools.
 - `./plugins/` (project directory)
 - `~/.aphelion/plugins/` (user directory)
 
-See [PLUGIN_DEV.md](PLUGIN_DEV.md) for development guide.
+See [PLUGIN_DEV.md](PLUGIN_DEV.md) for the development guide. Plugins execute Python in the application process; load only code you trust.
 
 **Included plugins:**
 - Sepia Filter
@@ -78,9 +81,11 @@ See [PLUGIN_DEV.md](PLUGIN_DEV.md) for development guide.
 ## 🧪 Testing
 
 ```bash
-# Run all verification tests
+# Run the bundled component verification script
 python verify_all.py
 ```
+
+`verify_all.py` checks selected imports, document operations, effects, formats, themes and plugins. It is not a complete GUI or file-compatibility suite. Individual `test_*.py` scripts provide additional checks. A Qt-capable environment is required; no desktop validation result is implied by this README.
 
 ## 📋 Requirements
 
@@ -88,7 +93,7 @@ python verify_all.py
 - PySide6
 - NumPy, SciPy
 - PyCairo (Cairo-based rendering backend)
-- Linux (tested on Fedora/Nobara)
+- Linux desktop; Qt, Cairo and display-system dependencies must be available
 
 ### Installing PyCairo
 
@@ -105,8 +110,4 @@ sudo apt install libcairo2-dev
 
 ## 📄 License
 
-MIT License
-
----
-
-*Aphelion - A professional image editor for Linux*
+MIT, as declared by the package metadata. This checkout does not include a standalone `LICENSE` file.
