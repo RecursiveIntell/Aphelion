@@ -1,5 +1,7 @@
 # Aphelion Image Editor
 
+<!-- last-verified: 2026-10-23 -->
+
 **Aphelion** is a layer-based image editor for Linux, built with Python and PySide6. It includes drawing and selection tools, image effects, Cairo compositing, and a layered project format. The package version is maintained in [pyproject.toml](pyproject.toml).
 
 ## ✨ Features
@@ -59,6 +61,8 @@ aphelion
 # Or run from the source checkout
 PYTHONPATH=src python -m aphelion
 ```
+
+A successful launch opens the **Welcome to Aphelion** screen. Choose **New Image...** to create a canvas; the screen also offers **Open Image...** and a list of recent files.
 
 The optional `run.sh` launcher expects an environment named `venv` and forces Qt's `xcb` backend, so it needs an X11/XWayland session. The commands above avoid that launcher-specific requirement.
 
